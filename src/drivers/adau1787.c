@@ -238,21 +238,45 @@ int adau1787_write_register(sub_addr_t reg_addr, reg_word_t* data)
 
 int adau1787_safeload_write(sub_addr_t target_addr, uint8_t* data, size_t num_words)
 {
-  int ret = 0;
-
-  if (num_words > 5) {
-    LOG_ERR("Too many words. Safeload supports a maximum of 5.");
-    return -1;
+  if (data == NULL || num_words == 0 || num_words > ADAU1787_SAFELOAD_MAX_WORDS) {
+    LOG_ERR("Invalid safeload data or word count: %zu", num_words);
+    return -EINVAL;
   }
 
-  ret = adau1787_write(SAFELOAD_DATA_1, data, sizeof(data));
+  const size_t data_len = num_words * ADAU1787_PARAM_RAM_WIDTH_BYTES;
+  const uint32_t target_end_addr = (uint32_t)target_addr + (uint32_t)data_len - 1U;
+
+  if (!IS_PARAM_ADDR(target_addr) || target_end_addr > ADAU1787_PARAM_RAM_END
+      || ((target_addr - ADAU1787_PARAM_RAM_BASE) % ADAU1787_PARAM_RAM_WIDTH_BYTES) != 0) {
+    LOG_ERR("Invalid safeload target address: 0x%04X", target_addr);
+    return -EINVAL;
+  }
+
+  const uint32_t target_word_addr = (target_addr - ADAU1787_PARAM_RAM_BASE) / ADAU1787_PARAM_RAM_WIDTH_BYTES;
+  if (target_word_addr == 0) {
+    LOG_ERR("Safeload cannot target parameter word 0");
+    return -EINVAL;
+  }
+
+  const uint32_t safeload_target = target_word_addr - 1;
+  param_word_t target_addr_buf = {
+    (uint8_t)((safeload_target >> 24) & 0xFF),
+    (uint8_t)((safeload_target >> 16) & 0xFF),
+    (uint8_t)((safeload_target >> 8) & 0xFF),
+    (uint8_t)(safeload_target & 0xFF),
+  };
+  param_word_t num_words_buf = {
+    0x00,
+    0x00,
+    0x00,
+    (uint8_t)num_words,
+  };
+
+  int ret = adau1787_write(SAFELOAD_DATA_1, data, data_len);
   if (ret != 0) {
     LOG_ERR("Failed to write Safeload Data.");
     return ret;
   }
-
-  uint8_t target_addr_buf[4] = { 0x00, 0x00, 0x00, 0x00 };
-  split_addr(target_addr, target_addr_buf);
 
   ret = adau1787_write(SAFELOAD_TARGET_ADDR, target_addr_buf, sizeof(target_addr_buf));
   if (ret != 0) {
@@ -260,17 +284,16 @@ int adau1787_safeload_write(sub_addr_t target_addr, uint8_t* data, size_t num_wo
     return ret;
   }
 
-  uint8_t num_words_buf[4] = { num_words, 0x00, 0x00, 0x00 };
-
-  k_usleep(21);
-
   ret = adau1787_write(SAFELOAD_NUM_WORDS, num_words_buf, sizeof(num_words_buf));
   if (ret != 0) {
     LOG_ERR("Failed to write Safeload Num Words.");
     return ret;
   }
 
-  return ret;
+  /* Do not overwrite the safeload slots before the next 48 kHz audio frame. */
+  k_usleep(21);
+
+  return 0;
 }
 
 // Read operations
