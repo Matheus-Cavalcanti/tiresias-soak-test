@@ -1,7 +1,7 @@
 /*
  * File:           defines.h
  *
- * Created:        Thursday, July 9, 2026 12:36:47 PM
+ * Created:        Friday, July 31, 2026 1:44:34 PM
  * Description:    adau_1787 IC default download data definitions.
  *
  * This software is distributed in the hope that it will be useful,
@@ -19,7 +19,7 @@
 #ifndef __DEFINES_H__
 #define __DEFINES_H__
 
-#define BufferSize_IC_1_SIGMA     	1366
+#define BufferSize_IC_1_SIGMA     	1566
 #define NumTransactions_IC_1_SIGMA	209
 
 #define BufferSize_IC_1_FAST     	6

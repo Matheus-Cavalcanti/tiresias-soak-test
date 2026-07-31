@@ -20,39 +20,45 @@
             <Algorithm name="ADAU1787SADCIN1" friendlyname="ADAU1787S ADC IN " cell="ADC IN1 " location="{X=107, Y=336} " Growth="4 " GrowthB="0 " FS="48000">
                 <Link pin="O_C0_A0_P1_out" dir="out" link="Link0" />
             </Algorithm>
-            <Algorithm name="ADAU1787ASRCINAlg1" friendlyname="ADAU1787 ASRC Input " cell="ASRC IN1 " location="{X=107, Y=207} " Growth="4 " GrowthB="0 " FS="48000">
-                <Link pin="O_C68_A0_P1_out" dir="out" link="Link2" />
-                <Link pin="O_C68_A0_P2_out" dir="out" link="Link3" />
+            <Algorithm name="ADAU1787ASRCINAlg1" friendlyname="ADAU1787 ASRC Input " cell="ASRC IN1 " location="{X=34, Y=206} " Growth="4 " GrowthB="0 " FS="48000">
+                <Link pin="O_C68_A0_P1_out" dir="out" link="Link6" />
+                <Link pin="O_C68_A0_P2_out" dir="out" link="Link7" />
             </Algorithm>
             <Algorithm name="DCInpAlg1" friendlyname="dc Input " cell="DC1 " location="{X=107, Y=19} " Growth="0 " GrowthB="0 " FS="48000">
                 <Link pin="O_C64_A0_P1_out" dir="out" link="Link1" />
             </Algorithm>
             <Algorithm name="MuteNoSlewAlg1" friendlyname="No Slew (Standard) " cell="Mute1 " location="{X=193, Y=331} " Growth="1 " GrowthB="0">
                 <Link pin="I_C2_A0_P1_in" dir="in" link="Link0" />
-                <Link pin="O_C2_A0_P2_out" dir="out" link="Link6" />
+                <Link pin="O_C2_A0_P2_out" dir="out" link="Link8" />
             </Algorithm>
             <Algorithm name="ReadBackAlgSigma2001" friendlyname="Data Capture Register Readback Sigma200 " cell="ReadBack1 " location="{X=254, Y=17} " Growth="0 " GrowthB="0">
                 <Link pin="I_C61_A0_P1_in" dir="in" link="Link1" />
             </Algorithm>
-            <Algorithm name="StMuxSwSlew1" friendlyname="Stereo SW Slew " cell="Nx2-1 " location="{X=289, Y=214} " Growth="2 " GrowthB="0">
-                <Link pin="I_C84_A0_P3_in" dir="in" link="Link2" />
-                <Link pin="I_C84_A0_P4_in" dir="in" link="Link3" />
-                <Link pin="I_C84_A0_P5_in" dir="in" link="Link6" />
-                <Link pin="I_C84_A0_P6_in" dir="in" link="Link6" />
-                <Link pin="O_C84_A0_P1_out" dir="out" link="Link4" />
-                <Link pin="O_C84_A0_P2_out" dir="out" link="Link5" />
+            <Algorithm name="GainS200AlgGrowDBStepUnstSubroutine1" friendlyname="Gain (DB Compact) - Growable - Optimized " cell="Volume " location="{X=304, Y=134} " Growth="2 " GrowthB="0">
+                <Link pin="I_C26_A0_P1_in" dir="in" link="Link6" />
+                <Link pin="I_C26_A0_P3_in" dir="in" link="Link7" />
+                <Link pin="O_C26_A0_P2_out" dir="out" link="Link4" />
+                <Link pin="O_C26_A0_P4_out" dir="out" link="Link5" />
             </Algorithm>
-            <Algorithm name="ADAU1787SigmaOutAlg3" friendlyname="ADAU1787 SDSP OUT " cell="SDSP OUT3 " location="{X=372, Y=331.5} " Growth="0 " GrowthB="0">
-                <Link pin="I_C44_A0_P1_in" dir="in" link="Link6" />
+            <Algorithm name="StMuxSwSlew1" friendlyname="Stereo SW Slew " cell="Troca " location="{X=531, Y=224} " Growth="2 " GrowthB="0">
+                <Link pin="I_C84_A0_P3_in" dir="in" link="Link4" />
+                <Link pin="I_C84_A0_P4_in" dir="in" link="Link5" />
+                <Link pin="I_C84_A0_P5_in" dir="in" link="Link8" />
+                <Link pin="I_C84_A0_P6_in" dir="in" link="Link8" />
+                <Link pin="O_C84_A0_P1_out" dir="out" link="Link2" />
+                <Link pin="O_C84_A0_P2_out" dir="out" link="Link3" />
             </Algorithm>
-            <Algorithm name="ADAU1787SigmaOutAlg4" friendlyname="ADAU1787 SDSP OUT " cell="SDSP OUT4 " location="{X=372, Y=379} " Growth="0 " GrowthB="0">
-                <Link pin="I_C47_A0_P1_in" dir="in" link="Link6" />
+            <Algorithm name="ADAU1787SigmaOutAlg3" friendlyname="ADAU1787 SDSP OUT " cell="SDSP OUT3 " location="{X=750, Y=282.5} " Growth="0 " GrowthB="0">
+                <Link pin="I_C44_A0_P1_in" dir="in" link="Link8" />
             </Algorithm>
-            <Algorithm name="ADAU1787SigmaOutAlg1" friendlyname="ADAU1787 SDSP OUT " cell="SDSP OUT1 " location="{X=372, Y=206} " Growth="0 " GrowthB="0">
-                <Link pin="I_C7_A0_P1_in" dir="in" link="Link4" />
+            <Algorithm name="ADAU1787SigmaOutAlg4" friendlyname="ADAU1787 SDSP OUT " cell="SDSP OUT4 " location="{X=750, Y=330} " Growth="0 " GrowthB="0">
+                <Link pin="I_C47_A0_P1_in" dir="in" link="Link8" />
             </Algorithm>
-            <Algorithm name="ADAU1787SigmaOutAlg2" friendlyname="ADAU1787 SDSP OUT " cell="SDSP OUT2 " location="{X=372, Y=254} " Growth="0 " GrowthB="0">
-                <Link pin="I_C9_A0_P1_in" dir="in" link="Link5" />
+            <Algorithm name="ADAU1787SigmaOutAlg1" friendlyname="ADAU1787 SDSP OUT " cell="SDSP OUT1 " location="{X=750, Y=157} " Growth="0 " GrowthB="0">
+                <Link pin="I_C7_A0_P1_in" dir="in" link="Link2" />
+            </Algorithm>
+            <Algorithm name="ADAU1787SigmaOutAlg2" friendlyname="ADAU1787 SDSP OUT " cell="SDSP OUT2 " location="{X=750, Y=205} " Growth="0 " GrowthB="0">
+                <Link pin="I_C9_A0_P1_in" dir="in" link="Link3" />
             </Algorithm>
         </Schematic>
     </IC>

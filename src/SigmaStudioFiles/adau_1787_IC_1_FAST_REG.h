@@ -1,7 +1,7 @@
 /*
  * File:           C:\users\crossover\Desktop\exports\adau_1787_IC_1_FAST_REG.h
  *
- * Created:        Thursday, July 9, 2026 12:36:47 PM
+ * Created:        Friday, July 31, 2026 1:44:34 PM
  * Description:    adau_1787:IC 1-Fast control register definitions.
  *
  * This software is distributed in the hope that it will be useful,
