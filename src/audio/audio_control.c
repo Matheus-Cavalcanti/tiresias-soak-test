@@ -20,6 +20,8 @@ LOG_MODULE_REGISTER(audio_control_module, LOG_LEVEL_INF);
 #define AUDIO_CONTROL_THREAD_PRIORITY   3
 #define AUDIO_CONTROL_ZBUS_TIMEOUT_MS   100
 
+#define SWITCH_ADDRESS MOD_TROCA_STEREOSWSLEW_ADDR
+
 ZBUS_SUBSCRIBER_DEFINE(audio_control_sub, 8);
 
 ZBUS_CHAN_DECLARE(le_audio_chan, led_chan);
@@ -52,9 +54,9 @@ static const char *stereo_switch_value_label(uint32_t value)
 {
 	switch (value) {
 	case 0:
-		return "False";
+		return "From BLE";
 	case 1:
-		return "True";
+		return "Passtrough";
 	default:
 		return "Unknown";
 	}
@@ -105,10 +107,10 @@ static int codec_switch_toggle(void)
 	uint32_t toggled_codec_param_value;
 	int ret;
 
-	ret = adau1787_read(MOD_NX2_1_STEREOSWSLEW_ADDR, codec_param, sizeof(codec_param));
+	ret = adau1787_read(SWITCH_ADDRESS, codec_param, sizeof(codec_param));
 	if (ret) {
 		LOG_ERR("Failed to read codec parameter at 0x%04X: %d",
-			MOD_NX2_1_STEREOSWSLEW_ADDR, ret);
+			SWITCH_ADDRESS, ret);
 		return ret;
 	}
 
@@ -116,23 +118,23 @@ static int codec_switch_toggle(void)
 	toggled_codec_param_value = (codec_param_value == 0U) ? 1U : 0U;
 	u32_to_param_word(toggled_codec_param_value, codec_param);
 
-	ret = adau1787_write(MOD_NX2_1_STEREOSWSLEW_ADDR, codec_param, sizeof(codec_param));
+	ret = adau1787_write(SWITCH_ADDRESS, codec_param, sizeof(codec_param));
 	if (ret) {
 		LOG_ERR("Failed to write codec parameter at 0x%04X: %d",
-			MOD_NX2_1_STEREOSWSLEW_ADDR, ret);
+			SWITCH_ADDRESS, ret);
 		return ret;
 	}
 
-	ret = adau1787_read(MOD_NX2_1_STEREOSWSLEW_ADDR, codec_param, sizeof(codec_param));
+	ret = adau1787_read(SWITCH_ADDRESS, codec_param, sizeof(codec_param));
 	if (ret) {
 		LOG_ERR("Failed to read toggled codec parameter at 0x%04X: %d",
-			MOD_NX2_1_STEREOSWSLEW_ADDR, ret);
+			SWITCH_ADDRESS, ret);
 		return ret;
 	}
 
 	codec_param_value = param_word_to_u32(codec_param);
 	LOG_INF("Stereo Switch Nx2 at 0x%04X toggled to %u (%s), raw=0x%08X",
-		MOD_NX2_1_STEREOSWSLEW_ADDR, codec_param_value,
+		SWITCH_ADDRESS, codec_param_value,
 		stereo_switch_value_label(codec_param_value), codec_param_value);
 
   struct led_chan_msg_t led_msg;
