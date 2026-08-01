@@ -93,4 +93,9 @@ int hw_codec_soft_reset(void);
  */
 int hw_codec_init(void);
 
+/**
+ * @brief Read and log the HW codec STATUS2 register.
+ */
+void hw_codec_log_status_2(void);
+
 #endif /* _HW_CODEC_H_ */

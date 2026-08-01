@@ -98,6 +98,11 @@ typedef uint16_t sub_addr_t;
 int adau1787_init(void);
 
 /**
+ * @brief Read and log the ADAU1787 STATUS2 register.
+ */
+void adau1787_log_status_2(void);
+
+/**
  * @brief Write data to the ADAU1787.
  *
  * Write operations on the ADAU1787 utilize burst mode, where the master device sends an initial start address, and the

@@ -59,3 +59,8 @@ int hw_codec_init(void)
 {
   return adau1787_init();
 }
+
+void hw_codec_log_status_2(void)
+{
+  adau1787_log_status_2();
+}

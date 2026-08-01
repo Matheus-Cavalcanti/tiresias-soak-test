@@ -38,7 +38,7 @@ static int adau_init_error = 0;
 
 #define ADAU1787_FIELD_GET(value, mask, shift) (((value) & (mask)) >> (shift))
 
-static void adau1787_log_status_2(void)
+void adau1787_log_status_2(void)
 {
   reg_word_t status2 = 0;
   int ret = adau1787_read_register(REG_STATUS2_IC_1_Sigma_ADDR, &status2);
@@ -199,8 +199,6 @@ int adau1787_init(void)
   default_download_IC_1_Sigma();
   default_download_IC_1_Fast();
   ERR_CHK_MSG(adau_init_error, "Failed to program ADAU1787 codec");
-
-  adau1787_log_status_2();
 
   LOG_INF("Audio codec initialization done.");
   return 0;

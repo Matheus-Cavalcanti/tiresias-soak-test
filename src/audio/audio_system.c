@@ -29,6 +29,7 @@ LOG_MODULE_REGISTER(audio_system, CONFIG_AUDIO_SYSTEM_LOG_LEVEL);
 
 #define DEBUG_INTERVAL_NUM 1000
 #define TEST_TONE_BASE_FREQ_HZ 1000
+#define I2S_STATUS_SETTLE_TIME_MS 10
 
 K_THREAD_STACK_DEFINE(encoder_thread_stack, CONFIG_ENCODER_STACK_SIZE);
 
@@ -396,6 +397,9 @@ void audio_system_start(void)
 
   ret = audio_datapath_start(&fifo_rx);
   ERR_CHK(ret);
+
+  k_msleep(I2S_STATUS_SETTLE_TIME_MS);
+  hw_codec_log_status_2();
 #endif /* ((CONFIG_AUDIO_SOURCE_USB) && (CONFIG_AUDIO_DEV == GATEWAY))) */
 }
 
