@@ -1,15 +1,20 @@
-// P0.07/AIN3 -> MP3/FSYNC_1
-// P0.06/AIN2 -> MP4/BCLK_1
-// P0.04/AIN0 -> MP6/SDATAI_1
-// P0.05/AIN1 -> MP5/SDATAO_1
+/* Temporary pin swap until the SPT0 data path is repaired. */
+
+&adau_1787 {
+	mp3-gpios = <&gpio1 14 GPIO_ACTIVE_HIGH>;
+	mp4-gpios = <&gpio1 15 GPIO_ACTIVE_HIGH>;
+	mp5-gpios = <&gpio1 12 GPIO_ACTIVE_HIGH>;
+	mp6-gpios = <&gpio1 13 GPIO_ACTIVE_HIGH>;
+};
 
 &pinctrl {
 	i2s0_default: i2s0_default {
 		group1 {
-      psels = <NRF_PSEL(I2S_MCK, 1, 01)>;
-      nordic,drive-mode = <NRF_DRIVE_H0H1>;
-    };
-    group2 {
+			psels = <NRF_PSEL(I2S_MCK, 1, 1)>;
+			nordic,drive-mode = <NRF_DRIVE_H0H1>;
+		};
+
+		group2 {
 			psels = <NRF_PSEL(I2S_SCK_M, 0, 6)>,
 				<NRF_PSEL(I2S_LRCK_M, 0, 7)>,
 				<NRF_PSEL(I2S_SDOUT, 0, 4)>,
@@ -19,8 +24,8 @@
 
 	i2s0_sleep: i2s0_sleep {
 		group1 {
-			psels = <NRF_PSEL(I2S_MCK, 1, 01)>,
-        			<NRF_PSEL(I2S_SCK_M, 0, 6)>,
+			psels = <NRF_PSEL(I2S_MCK, 1, 1)>,
+				<NRF_PSEL(I2S_SCK_M, 0, 6)>,
 				<NRF_PSEL(I2S_LRCK_M, 0, 7)>,
 				<NRF_PSEL(I2S_SDOUT, 0, 4)>,
 				<NRF_PSEL(I2S_SDIN, 0, 5)>;
