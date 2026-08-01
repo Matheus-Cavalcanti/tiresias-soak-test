@@ -31,7 +31,7 @@
                 <Link pin="I_C2_A0_P1_in" dir="in" link="Link0" />
                 <Link pin="O_C2_A0_P2_out" dir="out" link="Link8" />
             </Algorithm>
-            <Algorithm name="ReadBackAlgSigma2001" friendlyname="Data Capture Register Readback Sigma200 " cell="ReadBack1 " location="{X=254, Y=17} " Growth="0 " GrowthB="0">
+            <Algorithm name="ReadBackAlgSigma2001" friendlyname="Data Capture Register Readback Sigma200 " cell="ReadBack1 " location="{X=244, Y=17} " Growth="0 " GrowthB="0">
                 <Link pin="I_C61_A0_P1_in" dir="in" link="Link1" />
             </Algorithm>
             <Algorithm name="GainS200AlgGrowDBStepUnstSubroutine1" friendlyname="Gain (DB Compact) - Growable - Optimized " cell="Volume " location="{X=304, Y=134} " Growth="2 " GrowthB="0">

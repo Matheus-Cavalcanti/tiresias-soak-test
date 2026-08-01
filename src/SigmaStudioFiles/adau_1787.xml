@@ -1276,7 +1276,7 @@
             <Address>49345</Address>
             <AddrIncr>0</AddrIncr>
             <Size>1</Size>
-            <Data>0x3F, </Data>
+            <Data>0x3E, </Data>
         </Register>
         <Register>
             <Name>IC 1.SPT0_ROUTE11 Register</Name>

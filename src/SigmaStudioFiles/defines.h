@@ -1,7 +1,7 @@
 /*
  * File:           defines.h
  *
- * Created:        Friday, July 31, 2026 1:44:34 PM
+ * Created:        Saturday, August 1, 2026 2:39:58 PM
  * Description:    adau_1787 IC default download data definitions.
  *
  * This software is distributed in the hope that it will be useful,

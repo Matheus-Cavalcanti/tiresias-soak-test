@@ -1,7 +1,7 @@
 /*
  * File:           C:\users\crossover\Desktop\exports\adau_1787_IC_1_FAST_REG.h
  *
- * Created:        Friday, July 31, 2026 1:44:34 PM
+ * Created:        Saturday, August 1, 2026 2:39:58 PM
  * Description:    adau_1787:IC 1-Fast control register definitions.
  *
  * This software is distributed in the hope that it will be useful,
@@ -873,7 +873,7 @@
 /* SPT0_ROUTE10  - Registers (IC 1_Fast) */
 #define REG_SPT0_ROUTE10_IC_1_Fast_ADDR           0xC0C1
 #define REG_SPT0_ROUTE10_IC_1_Fast_BYTE           1
-#define REG_SPT0_ROUTE10_IC_1_Fast_VALUE          0x3F
+#define REG_SPT0_ROUTE10_IC_1_Fast_VALUE          0x3E
 
 /* SPT0_ROUTE11  - Registers (IC 1_Fast) */
 #define REG_SPT0_ROUTE11_IC_1_Fast_ADDR           0xC0C2

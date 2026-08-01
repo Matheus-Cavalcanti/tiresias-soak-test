@@ -1,7 +1,7 @@
 /*
  * File:           C:\users\crossover\Desktop\exports\adau_1787_IC_1_SIGMA.h
  *
- * Created:        Friday, July 31, 2026 1:44:34 PM
+ * Created:        Saturday, August 1, 2026 2:39:58 PM
  * Description:    adau_1787:IC 1-Sigma program data.
  *
  * This software is distributed in the hope that it will be useful,
@@ -1086,7 +1086,7 @@ ADI_REG_TYPE R169_SPT0_ROUTE9_IC_1_Sigma_Default[REG_SPT0_ROUTE9_IC_1_Sigma_BYTE
 
 /* Register Default - IC 1.SPT0_ROUTE10 Register */
 ADI_REG_TYPE R170_SPT0_ROUTE10_IC_1_Sigma_Default[REG_SPT0_ROUTE10_IC_1_Sigma_BYTE] = {
-0x3F
+0x3E
 };
 
 /* Register Default - IC 1.SPT0_ROUTE11 Register */

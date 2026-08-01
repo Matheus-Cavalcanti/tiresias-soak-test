@@ -339,7 +339,7 @@
 0xC0, 0xC0, 			/* (169) IC 1.SPT0_ROUTE9 Register */
 0x3F, 
 0xC0, 0xC1, 			/* (170) IC 1.SPT0_ROUTE10 Register */
-0x3F, 
+0x3E, 
 0xC0, 0xC2, 			/* (171) IC 1.SPT0_ROUTE11 Register */
 0x3F, 
 0xC0, 0xC3, 			/* (172) IC 1.SPT0_ROUTE12 Register */
