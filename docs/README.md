@@ -31,6 +31,8 @@ Module documents describe implementation-level responsibilities, public APIs,
 configuration requirements, and message contracts.
 
 - [Button module](modules/button.md): button GPIO handling and zbus events.
+- [ADAU1787 startup](modules/adau1787-startup.md): codec reset, I2C programming,
+  SigmaStudio download, I2S activation, status checks, and failure behavior.
 - [LED module](modules/led.md): LED commands, GPIO handling, and blink behavior.
 
 ## Where New Documentation Belongs
