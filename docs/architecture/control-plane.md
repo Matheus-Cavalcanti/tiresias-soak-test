@@ -3,14 +3,14 @@
 ## Purpose
 
 The Tiresias firmware uses an event-driven control plane to coordinate changes in device
-behavior. It is organized as a supervisory device controller and a set of cooperating
-subsystem state machines.
+behavior. It is organized as a supervisory Device Controller subsystem and a set of
+cooperating subsystems.
 
 This architecture is best described as a **network of communicating finite-state
-machines**. It is not one monolithic hierarchical state machine: each subsystem owns an
-independent semantic dimension and can be in a state at the same time as the others.
-Hierarchy may still be used inside an individual machine where several states share common
-behavior.
+machines**. It is not one monolithic hierarchical state machine: each stateful subsystem
+owns an independent semantic dimension and can be in a state at the same time as the
+others. Hierarchy may still be used inside an individual machine where several states share
+common behavior.
 
 The architectural layers and the control/data-plane distinction describe different views
 of the firmware:
@@ -19,29 +19,30 @@ of the firmware:
 - The control plane describes decisions, commands, events, and state reporting.
 - The audio data plane transports time-critical ISO, LC3, PCM, and I2S data.
 
-Consequently, the control plane occupies much of the application layer but also interacts
-with services in the module layer.
+Consequently, the control plane occupies much of the application layer but also includes
+subsystems implemented in the module layer.
 
 ## Overview
 
 ```mermaid
 flowchart TB
-    controller["Device controller<br/>system lifecycle and policy"]
+    controller["Device Controller subsystem<br/>system lifecycle and policy"]
 
-    controlLink["BLE control-link state machine<br/>phone or workstation connection"]
-    broadcast["Broadcast-reception state machine<br/>PA and BIS synchronization"]
-    codec["Codec state machine<br/>ADAU1787 lifecycle and audio presentation"]
-    imu["IMU service<br/>state machine only if required"]
+    controlLink["Control Link subsystem<br/>phone or workstation BLE connection"]
+    broadcast["Audio Streaming subsystem<br/>PA and BIS synchronization"]
+    codec["Codec Controller subsystem<br/>ADAU1787 lifecycle and audio presentation"]
+    button["Button Input subsystem<br/>GPIO and debounced input events"]
+    led["LED Indicator subsystem<br/>device indications"]
 
     controller -->|"Control availability"| controlLink
     controller -->|"Reception commands"| broadcast
     controller -->|"Desired listening mode"| codec
-    controller -->|"Sensing policy"| imu
+    controller -->|"Indication commands"| led
 
     controlLink -->|"Connection and command events"| controller
-    broadcast -->|"Broadcast state"| controller
-    codec -->|"Codec state and faults"| controller
-    imu -->|"Motion events and faults"| controller
+    broadcast -->|"Audio Streaming state"| controller
+    codec -->|"Codec Controller state and faults"| controller
+    button -->|"Button events"| controller
 
     broadcast -->|"Stream available or lost"| codec
 ```
@@ -50,52 +51,90 @@ The arrows carry control-plane information, not audio frames. Broadcast ISO pack
 frames, decoded samples, and I2S buffers remain in dedicated callbacks, FIFOs, and fixed
 buffers.
 
-## State-machine ownership
+## Subsystem naming and ownership
 
-| State machine | Semantic question it answers |
+Every active control-plane owner is called a **subsystem**. A subsystem may own a state
+machine, consume Zbus messages through a subscriber, publish semantic events, or combine
+these roles. State machines and subscribers are implementation mechanisms owned by a
+subsystem; they are not independently named architectural components.
+
+The canonical subsystem names are `Device Controller`, `Control Link`, `Audio Streaming`,
+`Codec Controller`, `Button Input`, and `LED Indicator`. Prose uses the form *Device
+Controller subsystem*; diagrams and tables may use the canonical name alone when their
+context already identifies the entries as subsystems.
+
+The four stateful subsystems answer independent semantic questions:
+
+| Stateful subsystem | Semantic question it answers |
 |---|---|
-| Device controller | Is the device starting, operational, conserving power, or in a fatal fault? |
-| BLE control link | Can the phone or workstation exchange control information with the device? |
-| Broadcast reception | What is the device's synchronization relationship with an LE Audio broadcaster? |
-| Codec | What is the ADAU1787's operational condition, and what audio is it presenting? |
+| Device Controller | Is the device starting, operational, conserving power, or in a fatal fault? |
+| Control Link | Can the phone or workstation exchange control information with the device? |
+| Audio Streaming | What is the device's synchronization relationship with an LE Audio broadcaster? |
+| Codec Controller | What is the ADAU1787's operational condition, and what audio is it presenting? |
 
-Each machine changes only its own state. It requests work from another subsystem using a
-command and receives completion, state, or fault events in response. The device controller
-coordinates system-wide policy but does not directly manipulate codec registers, Bluetooth
-procedures, or audio buffers.
+Each stateful subsystem changes only its own state. It requests work from another subsystem
+using a command and receives completion, state, or fault events in response. The Device
+Controller subsystem coordinates system-wide policy but does not directly manipulate codec
+registers, Bluetooth procedures, or audio buffers.
 
-## 1. Device controller
+### State-centric model
+
+All state machines are **state-centric**. Each stateful subsystem keeps its authoritative
+current state in private internal storage. Command and event handlers evaluate that private
+state, perform a valid transition, and then publish the new value to the subsystem's Zbus
+state channel.
+
+The Zbus state channel is a read-only mirror for the rest of the control plane; it is not the
+state machine's backing store or a shared variable through which another subsystem can
+change state. Only the owning subsystem publishes to its state channel. Other subsystems
+observe the channel for transitions or read its latest value as a snapshot.
+
+The private state and channel mirror must start with the same initial value:
+
+| Subsystem | Initial private state and channel value |
+|---|---|
+| Device Controller | `OFF` |
+| Control Link | `DISABLED` |
+| Audio Streaming | `DISABLED` |
+| Codec Controller | `OFF` |
+
+A transition helper should be the single internal path for changing state. It updates the
+private state and publishes the mirror only after the transition has been accepted. If
+publication fails, the private state remains authoritative and the owning subsystem handles
+the stale mirror as a reporting failure rather than recovering state by reading the channel.
+
+## 1. Device Controller subsystem
 
 ### Why it exists
 
-The device controller is the high-level supervisor originally represented as the
-application `Controller`. It provides one authoritative view of whole-device availability,
-starts services in the required order, coordinates operations that involve several
-subsystems, and handles failures that prevent continued operation.
+The Device Controller subsystem is the high-level supervisor originally represented by the
+application `Controller` implementation. It provides one authoritative view of whole-device
+availability, starts subsystems in the required order, coordinates operations that involve
+several subsystems, and handles failures that prevent continued operation.
 
-Calling it a *controller* or *supervisor* is preferable to *master*: it requests desired
-behavior from subsystem owners rather than implementing their procedures.
+Calling this subsystem a *controller* or *supervisor* is preferable to *master*: it requests
+desired behavior from other subsystem owners rather than implementing their procedures.
 
 ### Semantic responsibility
 
-The controller represents the lifecycle of the complete device. It must not duplicate
-detailed Bluetooth or audio states. For example, broadcast reception can be `STREAMING`
-while the device controller remains `OPERATIONAL`.
+The Device Controller subsystem represents the lifecycle of the complete device. It must
+not duplicate detailed Bluetooth or audio states. For example, the Audio Streaming
+subsystem can be `STREAMING` while the Device Controller subsystem remains `OPERATIONAL`.
 
 | State | Meaning |
 |---|---|
-| `OFF` | Application services and active audio paths are stopped. |
+| `OFF` | Application subsystems and active audio paths are stopped. |
 | `INITIALIZING` | Required subsystems are becoming ready. |
-| `OPERATIONAL` | Required services are ready and normal operation is permitted. |
-| `LOW_POWER` | Nonessential services and active audio paths are suspended to conserve power. |
-| `FAULT` | A device-level invariant or required service has failed irrecoverably. |
+| `OPERATIONAL` | Required subsystems are ready and normal operation is permitted. |
+| `LOW_POWER` | Nonessential subsystems and active audio paths are suspended to conserve power. |
+| `FAULT` | A device-level invariant or required subsystem has failed irrecoverably. |
 
 ```mermaid
 stateDiagram-v2
     [*] --> OFF
     OFF --> INITIALIZING: START
-    INITIALIZING --> OPERATIONAL: REQUIRED_SERVICES_READY
-    INITIALIZING --> FAULT: REQUIRED_SERVICE_FAILED
+    INITIALIZING --> OPERATIONAL: REQUIRED_SUBSYSTEMS_READY
+    INITIALIZING --> FAULT: REQUIRED_SUBSYSTEM_FAILED
 
     OPERATIONAL --> LOW_POWER: LOW_POWER_REQUESTED
     LOW_POWER --> OPERATIONAL: WAKE_REQUESTED
@@ -110,29 +149,29 @@ stateDiagram-v2
 ```
 
 High-level operating modes should be added only when they change system-wide policy.
-Duplicating `BROADCAST_ONLY` in the controller merely to mirror the codec machine would
-create two owners for the same fact.
+Duplicating `BROADCAST_ONLY` in the Device Controller subsystem merely to mirror the Codec
+Controller subsystem would create two owners for the same fact.
 
-## 2. BLE control-link state machine
+## 2. Control Link subsystem
 
 ### Why it exists
 
-The bidirectional BLE connection to the companion application or research workstation is
-independent of LE Audio broadcast reception. It can connect, disconnect, or fail without
-changing the broadcast synchronization state.
+The Control Link subsystem owns the bidirectional BLE connection to the companion
+application or research workstation. It is independent of the Audio Streaming subsystem
+and can connect, disconnect, or fail without changing broadcast synchronization state.
 
 ### Semantic responsibility
 
-This machine owns connectable advertising, the BLE connection lifecycle, and availability
-of the custom control service. It receives control messages, but the subsystem that owns a
-requested behavior validates and executes the command.
+This subsystem owns connectable advertising, the BLE connection lifecycle, and availability
+of the custom GATT control interface. It receives control messages, but the subsystem that
+owns a requested behavior validates and executes the command.
 
 | State | Meaning |
 |---|---|
-| `DISABLED` | The control link is unavailable. |
-| `ADVERTISING` | The device is accepting control-link connection requests. |
-| `CONNECTED` | A BLE connection exists and the custom control service is available. |
-| `ERROR` | The control-link subsystem cannot continue without recovery. |
+| `DISABLED` | The Control Link subsystem is unavailable. |
+| `ADVERTISING` | The subsystem is accepting BLE connection requests. |
+| `CONNECTED` | A BLE connection exists and the custom GATT control interface is available. |
+| `ERROR` | The Control Link subsystem cannot continue without recovery. |
 
 ```mermaid
 stateDiagram-v2
@@ -152,22 +191,23 @@ stateDiagram-v2
 Individual GATT reads, writes, and notifications normally remain events or actions within
 `CONNECTED`; they are not persistent states.
 
-## 3. Broadcast-reception state machine
+## 3. Audio Streaming subsystem
 
 ### Why it exists
 
-LE Audio broadcast reception is a multi-stage asynchronous procedure. Scanning, periodic
-advertising synchronization, BASE selection, BIG/BIS synchronization, streaming, and
-recovery cannot be represented accurately by the control-link state machine.
+The Audio Streaming subsystem performs a multi-stage asynchronous procedure. Scanning,
+periodic advertising synchronization, BASE selection, BIG/BIS synchronization, streaming,
+and recovery cannot be represented accurately by the Control Link subsystem.
 
 ### Semantic responsibility
 
-This machine owns discovery and synchronization with a broadcast source. It reports
-whether broadcast data is available but does not decide whether the user should hear it.
+The Audio Streaming subsystem owns discovery and synchronization with a broadcast
+source. It reports whether broadcast data is available but does not decide whether the user
+should hear it.
 
 | State | Meaning |
 |---|---|
-| `DISABLED` | Broadcast reception is unavailable. |
+| `DISABLED` | The Audio Streaming subsystem is unavailable. |
 | `IDLE` | The receiver is initialized but not searching. |
 | `SCANNING` | The device is searching for a suitable source. |
 | `PA_SYNCED` | Periodic advertising synchronization is established. |
@@ -200,30 +240,30 @@ stateDiagram-v2
     ERROR --> IDLE: RESET_SUCCEEDED
 ```
 
-The two Bluetooth machines are orthogonal. A valid simultaneous condition is:
+The two Bluetooth subsystems are orthogonal. A valid simultaneous condition is:
 
 ```text
-BLE control link:     CONNECTED
-Broadcast reception:  STREAMING
+Control Link:         CONNECTED
+Audio Streaming:      STREAMING
 ```
 
-## 4. Codec state machine
+## 4. Codec Controller subsystem
 
 ### Why it exists
 
 The ADAU1787 has a meaningful lifecycle: reset and initialization, signal-path selection,
 parameter updates, power-down, and communication failure. It also contains the microphone
-inputs, DSP, broadcast input, and analog output. The codec is therefore the component that
-ultimately determines what the user hears.
+inputs, DSP, broadcast input, and analog output. The Codec Controller subsystem therefore
+determines what the user hears.
 
-A dedicated owner prevents unrelated modules from issuing uncoordinated I2C transactions
-or maintaining conflicting views of codec readiness and audible presentation.
+A dedicated subsystem owner prevents unrelated modules from issuing uncoordinated I2C
+transactions or maintaining conflicting views of codec readiness and audible presentation.
 
 ### Semantic responsibility
 
-The codec machine represents both the operational condition of the physical ADAU1787 and
-its active audio path. At this initial implementation stage, it owns local-only and
-broadcast-only presentation. It does not manage Bluetooth synchronization or transport
+The Codec Controller subsystem represents both the operational condition of the physical
+ADAU1787 and its active audio path. At this initial implementation stage, it owns local-only
+and broadcast-only presentation. It does not manage Bluetooth synchronization or transport
 audio frames.
 
 | State | Meaning |
@@ -264,9 +304,9 @@ stateDiagram-v2
 output, while transitions defined on `ACTIVE`, such as `STOP_CODEC` or `CODEC_FAULT`, apply
 to every presentation mode.
 
-Codec configuration and parameter operations are short and synchronous at this stage.
-They are handled as transition actions or events within `READY` or the current `ACTIVE`
-substate rather than being modeled as a persistent state.
+Codec configuration and parameter operations are short and synchronous at this stage. The
+Codec Controller subsystem handles them as transition actions or events within `READY` or
+the current `ACTIVE` substate rather than modeling them as a persistent state.
 
 ## Coordination example
 
@@ -275,9 +315,9 @@ audio is selected:
 
 ```mermaid
 sequenceDiagram
-    participant CTRL as Device controller
-    participant BRX as Broadcast reception
-    participant CODEC as Codec
+    participant CTRL as Device Controller
+    participant BRX as Audio Streaming
+    participant CODEC as Codec Controller
 
     CTRL->>BRX: START_SCAN
     BRX-->>CTRL: BIS_STARTED
@@ -291,24 +331,29 @@ sequenceDiagram
 
 This is a command-and-report relationship:
 
-- The controller requests a desired high-level behavior.
+- The Device Controller subsystem requests a desired high-level behavior.
 - The owning subsystem determines the detailed transition sequence.
-- The subsystem reports completion or failure.
-- The controller does not write another machine's state directly.
+- The subsystem reports completion by mirroring its new private state, or reports failure
+  through its result-event channel.
+- The Device Controller subsystem does not write another subsystem's state directly.
 
-## IMU and simple services
+## Supporting subsystems and modules
 
-Not every module requires a state machine. The IMU may need one if calibration, operating
-modes, or recovery create meaningful persistent conditions such as:
+The Button Input and LED Indicator subsystems participate in the control plane without
+needing state machines. The Button Input subsystem publishes debounced input events. The
+LED Indicator subsystem consumes indication commands and owns LED GPIO behavior and timing.
+
+Not every module is a subsystem, and not every subsystem requires a state machine. Future
+IMU functionality may warrant a named subsystem if calibration, operating modes, or
+recovery create meaningful persistent conditions such as:
 
 ```text
 OFF -> INITIALIZING -> CALIBRATING -> TRACKING -> ERROR
 ```
 
-If it initializes once and periodically publishes samples, a conventional service with
-initialization, sampling, and error reporting is simpler. Storage, LEDs, and buttons
-similarly do not require state machines unless their behavior gains a genuine asynchronous
-lifecycle.
+If the IMU initializes once and periodically publishes samples, a conventional module with
+initialization, sampling, and error reporting is simpler. Storage similarly remains a
+module unless its behavior gains a genuine asynchronous lifecycle.
 
 ## Hierarchy
 
@@ -316,16 +361,16 @@ The overall architecture is not a single hierarchical state machine because the 
 states coexist rather than nest. For example:
 
 ```text
-Device controller:     OPERATIONAL
-BLE control link:      CONNECTED
-Broadcast reception:   STREAMING
-Codec:                 ACTIVE / BROADCAST_ONLY
+Device Controller:    OPERATIONAL
+Control Link:         CONNECTED
+Audio Streaming:      STREAMING
+Codec Controller:     ACTIVE / BROADCAST_ONLY
 ```
 
-Hierarchy can still reduce repetition inside one subsystem. The broadcast states `IDLE`,
-`SCANNING`, `PA_SYNCED`, `BIS_SYNCING`, and `STREAMING` could be nested within a common
-`ENABLED` parent. A transition such as `DISABLE_RECEIVER` could then be defined once on the
-parent instead of repeated for every child state.
+Hierarchy can still reduce repetition inside one subsystem. The Audio Streaming states
+`IDLE`, `SCANNING`, `PA_SYNCED`, `BIS_SYNCING`, and `STREAMING` could be nested within a
+common `ENABLED` parent. A transition such as `DISABLE_RECEIVER` could then be defined once
+on the parent instead of repeated for every child state.
 
 The recommended classification is therefore:
 
@@ -338,18 +383,22 @@ State-machine transitions operate on low-rate control information:
 
 - Commands express requested behavior, such as `START_SCAN` or `SELECT_BROADCAST`.
 - Events describe occurrences, such as `BIS_STARTED` or `CODEC_FAULT`.
-- State reports describe durable conditions, such as `STREAMING` or `BROADCAST_ONLY`.
+- State reports mirror authoritative private conditions, such as `STREAMING` or
+  `BROADCAST_ONLY`.
 
 Zephyr Zbus is suitable for these commands, events, and reports. Interrupt and Bluetooth
 callbacks should capture the required information, enqueue or publish an event, and return.
-Blocking I2C transactions and longer operations should run in the owning service thread or
-work queue.
+Blocking I2C transactions and longer operations should run in the owning subsystem thread
+or work queue.
+
+The intended publishers, subscribers, acknowledgement behavior, and delivery constraints
+for these messages are defined in [zbus.md](zbus.md).
 
 The audio data plane remains separate:
 
 | Information | Transport |
 |---|---|
-| Commands, events, and state reports | Zbus channels or service queues |
+| Commands, events, and state reports | Zbus channels or subsystem queues |
 | Bluetooth ISO SDUs and LC3 frames | Dedicated FIFOs |
 | PCM and I2S blocks | Fixed buffers and real-time callbacks |
 | High-rate IMU samples | Dedicated sensor queue or buffer if required |
@@ -367,10 +416,10 @@ GPIO and cannot be sampled by the SAADC.
 
 | Current component | Current behavior | Architectural direction |
 |---|---|---|
-| Application controller | Maintains the overall `OFF`, `INITIALIZING`, `STANDARD`, `BROADCAST_STREAMING`, and `ERROR` states | Becomes a lifecycle supervisor and stops mirroring detailed codec presentation mode. |
-| Bluetooth service | Maintains `OFF`, `INITIALIZING`, `READY`, and `ERROR` | Separates control-link lifecycle from broadcast-reception lifecycle. |
-| Audio control | Maintains `OFF`, `INITIALIZING`, `STANDARD`, `BROADCAST_STREAMING`, and `ERROR` | Evolves into the codec-owned lifecycle and presentation state machine. |
-| ADAU1787 control | Performs codec programming and parameter operations | Becomes the implementation behind the codec state machine; short synchronous configuration operations remain actions rather than states. |
+| Current `Controller` implementation | Maintains the overall `OFF`, `INITIALIZING`, `STANDARD`, `BROADCAST_STREAMING`, and `ERROR` states | Becomes the Device Controller subsystem and stops mirroring detailed codec presentation mode. |
+| Current Bluetooth implementation | Maintains `OFF`, `INITIALIZING`, `READY`, and `ERROR` | Separates into the Control Link and Audio Streaming subsystems. |
+| Current `audio_control` implementation | Maintains `OFF`, `INITIALIZING`, `STANDARD`, `BROADCAST_STREAMING`, and `ERROR` | Evolves into the Codec Controller subsystem. |
+| ADAU1787 driver and control code | Performs codec programming and parameter operations | Becomes the implementation behind the Codec Controller subsystem; short synchronous configuration operations remain actions rather than states. |
 | Zbus channels | Carry commands, state reports, button events, and LE Audio lifecycle events | Remain the principal control-plane communication mechanism. |
 | LE Audio RX and audio datapath | Use FIFOs, LC3 decoding, timing compensation, and I2S buffering | Remain in the data plane rather than becoming state-machine event traffic. |
 

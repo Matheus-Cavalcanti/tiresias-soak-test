@@ -11,8 +11,10 @@ structured that way, without becoming source-level API references.
 
 - [System context](architecture/system-context.md): intended product context
   and the current proof-of-concept environment.
-- [Firmware control plane](architecture/control-plane.md): state-machine
-  ownership and subsystem coordination.
+- [Firmware control plane](architecture/control-plane.md): subsystem naming,
+  state-machine ownership, and coordination.
+- [Zbus channels](architecture/zbus.md): private-state mirroring, control-plane publishers,
+  subscribers, acknowledgement behavior, and delivery constraints.
 - [Hardware](architecture/hardware.md): principal hardware components and
   physical interfaces.
 
@@ -30,10 +32,10 @@ expectations, tool limitations, and recurring troubleshooting guidance.
 Module documents describe implementation-level responsibilities, public APIs,
 configuration requirements, and message contracts.
 
-- [Button module](modules/button.md): button GPIO handling and zbus events.
+- [Button Input subsystem](modules/button.md): button GPIO handling and Zbus events.
 - [ADAU1787 startup](modules/adau1787-startup.md): codec reset, I2C programming,
   SigmaStudio download, I2S activation, status checks, and failure behavior.
-- [LED module](modules/led.md): LED commands, GPIO handling, and blink behavior.
+- [LED Indicator subsystem](modules/led.md): LED commands, GPIO handling, and blink behavior.
 
 ## Where New Documentation Belongs
 

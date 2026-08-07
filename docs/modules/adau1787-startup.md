@@ -15,9 +15,9 @@ The codec is therefore programmed before BCLK and LRCK begin toggling.
 | Responsibility | Source |
 | --- | --- |
 | Application entry point | `src/main.c` |
-| Top-level initialization command | `src/application/controller.c` |
-| Audio state machine | `src/audio/audio_control.c` |
-| Audio subsystem initialization and stream startup | `src/audio/audio_system.c` |
+| Device Controller subsystem implementation | `src/application/controller.c` |
+| Codec Controller subsystem implementation | `src/audio/audio_control.c` |
+| Audio-system initialization and stream startup | `src/audio/audio_system.c` |
 | Hardware-codec abstraction | `src/modules/hw_codec.c` |
 | ADAU1787 GPIO, I2C, programming, and status driver | `src/drivers/adau1787.c` and `src/drivers/adau1787.h` |
 | SigmaStudio-to-driver adaptation macros | `src/drivers/SigmaStudioFW.h` |
@@ -36,8 +36,8 @@ because the driver uses `DT_NODELABEL(adau_1787)`.
 ```mermaid
 sequenceDiagram
     participant Main as main()
-    participant Controller as Controller thread
-    participant Audio as Audio control thread
+    participant Controller as Device Controller
+    participant Audio as Codec Controller
     participant System as Audio system
     participant I2S as nRF I2S
     participant Driver as ADAU1787 driver
@@ -65,12 +65,16 @@ sequenceDiagram
     System->>Driver: read and log STATUS2
 ```
 
-The controller and audio-control threads are statically created by Zephyr.
-`main()` does not call the codec driver directly. Instead, `controller_init()`
-notifies the controller zbus channel. The controller enters
-`CONTROLLER_STATE_INITIALIZING` and publishes `AUDIO_CMD_INIT`. The audio-control
-thread consumes that command, enters `AUDIO_STATE_INITIALIZING`, and calls
-`audio_system_init()`.
+The Device Controller subsystem thread and Codec Controller subsystem thread are
+statically created by Zephyr. `main()` does not call the codec driver directly.
+Instead, `controller_init()` notifies the Device Controller Zbus channel. The
+Device Controller subsystem enters `CONTROLLER_STATE_INITIALIZING` and publishes
+`AUDIO_CMD_INIT`. The Codec Controller subsystem consumes that command, enters
+`AUDIO_STATE_INITIALIZING`, and calls `audio_system_init()`.
+
+The `AUDIO_STATE_*` values describe private state owned by the Codec Controller subsystem.
+Its Zbus state channel mirrors that state for other subsystems and is not the authoritative
+state store.
 
 For the current headset configuration (`CONFIG_AUDIO_DEV=1`),
 `audio_system_init()` follows the I2S/hardware-codec branch. The USB bypass is
@@ -282,8 +286,8 @@ Successful programming moves the audio state to `AUDIO_STATE_STANDARD`, but it
 does not start PCM traffic. The codec stays powered and programmed while the
 application waits for LE Audio.
 
-When the audio-control thread receives `LE_AUDIO_EVT_STREAMING`, it calls
-`audio_system_start()`:
+When the Codec Controller subsystem thread receives `LE_AUDIO_EVT_STREAMING`, it
+calls `audio_system_start()`:
 
 1. Select the headset software-codec configuration.
 2. Initialize the transmit and receive FIFOs if needed.
@@ -325,13 +329,14 @@ implemented `adau1787_power_down()` helper. As a result:
   programmed;
 - a later `LE_AUDIO_EVT_STREAMING` restarts I2S and logs STATUS2 again without
   downloading the SigmaStudio images again; and
-- the full reset/programming sequence normally runs only once, during audio
-  subsystem initialization after application boot.
+- the full reset/programming sequence normally runs only once, during Codec
+  Controller subsystem initialization after application boot.
 
 ## Expected Logs and Troubleshooting Order
 
-A normal boot contains these codec-specific milestones, with other controller,
-Bluetooth, and audio logs interleaved because initialization is thread-driven:
+A normal boot contains these codec-specific milestones, with logs from the Device
+Controller, Control Link, and Audio Streaming subsystems and the audio modules
+interleaved because initialization is thread-driven:
 
 ```text
 Initializing audio codec...
@@ -389,8 +394,8 @@ Persistent platform behavior belongs in the handwritten layers:
 - change reset timing, error handling, or explicit probes in
   `src/drivers/adau1787.c`;
 - change SigmaStudio macro adaptation in `src/drivers/SigmaStudioFW.h`; and
-- change codec-versus-stream lifecycle ordering in `audio_system.c` or the
-  audio-control state machine.
+- change codec-versus-stream lifecycle ordering in `audio_system.c` or the Codec
+  Controller subsystem's state machine.
 
 If the download is regenerated, recheck the operation counts, image sizes and
 addresses, stop/start register values, and delay encoding quoted in this

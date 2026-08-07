@@ -1,8 +1,8 @@
-# LED Module
+# LED Indicator Subsystem
 
-The LED module owns LED GPIO setup and receives LED commands through zbus. It
-keeps LED handling simple: commands are published to `led_chan`, and a local
-worker thread applies them to the configured GPIOs.
+The LED Indicator subsystem owns LED GPIO setup and receives LED commands through
+Zbus. It keeps LED handling simple: commands are published to `led_chan`, and a
+local worker thread applies them to the configured GPIOs.
 
 ## Files
 
@@ -12,13 +12,13 @@ worker thread applies them to the configured GPIOs.
 
 ## Devicetree Requirements
 
-The module currently expects three LED aliases:
+The LED Indicator subsystem currently expects three LED aliases:
 
 - `led0`
 - `led1`
 - `led2`
 
-Each alias must be enabled and provide a `gpios` property. The module checks
+Each alias must be enabled and provide a `gpios` property. The subsystem checks
 this at compile time with `BUILD_ASSERT()` before creating the static LED table.
 
 ## Public API
@@ -34,7 +34,7 @@ LED pins as inactive outputs.
 
 ## Zbus Contract
 
-The module defines and subscribes to `led_chan`:
+The LED Indicator subsystem defines and subscribes to `led_chan`:
 
 ```c
 ZBUS_CHAN_DEFINE(led_chan, led_chan_msg_t, ...);
@@ -62,8 +62,8 @@ typedef struct led_chan_msg_t {
 } led_chan_msg_t;
 ```
 
-Consumers publish a command to `led_chan`; the LED thread receives it and
-updates the selected LED.
+Authorized subsystems publish commands to `led_chan`; the LED Indicator thread
+receives each command and updates the selected LED.
 
 ## Commands
 
@@ -78,7 +78,7 @@ when no LEDs remain in the blink mask.
 ## Runtime Flow
 
 1. `led_init()` configures the LED GPIOs.
-2. A zbus subscriber thread waits for `led_chan` messages.
+2. The LED Indicator subsystem's Zbus subscriber thread waits for `led_chan` messages.
 3. `handle_led_msg()` validates the LED index and command.
 4. GPIO state is updated immediately, or the LED is added to the blink mask.
 5. The timer toggles all LEDs currently present in the blink mask.
