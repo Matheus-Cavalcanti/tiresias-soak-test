@@ -54,7 +54,7 @@ buffers.
 
 | State machine | Semantic question it answers |
 |---|---|
-| Device controller | Is the device starting, operational, shutting down, or in a fatal fault? |
+| Device controller | Is the device starting, operational, conserving power, or in a fatal fault? |
 | BLE control link | Can the phone or workstation exchange control information with the device? |
 | Broadcast reception | What is the device's synchronization relationship with an LE Audio broadcaster? |
 | Codec | What is the ADAU1787's operational condition, and what audio is it presenting? |
@@ -87,7 +87,7 @@ while the device controller remains `OPERATIONAL`.
 | `OFF` | Application services and active audio paths are stopped. |
 | `INITIALIZING` | Required subsystems are becoming ready. |
 | `OPERATIONAL` | Required services are ready and normal operation is permitted. |
-| `SHUTTING_DOWN` | Subsystems are being stopped in a controlled sequence. |
+| `LOW_POWER` | Nonessential services and active audio paths are suspended to conserve power. |
 | `FAULT` | A device-level invariant or required service has failed irrecoverably. |
 
 ```mermaid
@@ -97,12 +97,16 @@ stateDiagram-v2
     INITIALIZING --> OPERATIONAL: REQUIRED_SERVICES_READY
     INITIALIZING --> FAULT: REQUIRED_SERVICE_FAILED
 
-    OPERATIONAL --> SHUTTING_DOWN: SHUTDOWN_REQUESTED
-    SHUTTING_DOWN --> OFF: SERVICES_STOPPED
+    OPERATIONAL --> LOW_POWER: LOW_POWER_REQUESTED
+    LOW_POWER --> OPERATIONAL: WAKE_REQUESTED
+
+    OPERATIONAL --> OFF: POWER_OFF_REQUESTED
+    LOW_POWER --> OFF: POWER_OFF_REQUESTED
 
     OPERATIONAL --> FAULT: FATAL_SYSTEM_FAILURE
+    LOW_POWER --> FAULT: FATAL_SYSTEM_FAILURE
     FAULT --> INITIALIZING: RECOVERY_REQUESTED
-    FAULT --> SHUTTING_DOWN: SHUTDOWN_REQUESTED
+    FAULT --> OFF: POWER_OFF_REQUESTED
 ```
 
 High-level operating modes should be added only when they change system-wide policy.
@@ -218,8 +222,9 @@ or maintaining conflicting views of codec readiness and audible presentation.
 ### Semantic responsibility
 
 The codec machine represents both the operational condition of the physical ADAU1787 and
-its active audio path. It owns local-only, broadcast-only, and mixed presentation. It does
-not manage Bluetooth synchronization or transport audio frames.
+its active audio path. At this initial implementation stage, it owns local-only and
+broadcast-only presentation. It does not manage Bluetooth synchronization or transport
+audio frames.
 
 | State | Meaning |
 |---|---|
@@ -229,7 +234,6 @@ not manage Bluetooth synchronization or transport audio frames.
 | `ACTIVE` | Parent state for modes in which the codec presents audio. |
 | `LOCAL_ONLY` | The local microphone and DSP path is presented at the analog output. |
 | `BROADCAST_ONLY` | The received broadcast path is presented at the analog output. |
-| `MIXED` | Local and broadcast paths are mixed and presented at the analog output. |
 | `ERROR` | Initialization or communication failed. |
 
 ```mermaid
@@ -242,14 +246,9 @@ stateDiagram-v2
     state ACTIVE {
         [*] --> LOCAL_ONLY
         LOCAL_ONLY --> BROADCAST_ONLY: SELECT_BROADCAST [broadcast available]
-        LOCAL_ONLY --> MIXED: ADD_BROADCAST [broadcast available]
         BROADCAST_ONLY --> LOCAL_ONLY: SELECT_LOCAL
-        BROADCAST_ONLY --> MIXED: ADD_LOCAL
-        MIXED --> LOCAL_ONLY: REMOVE_BROADCAST
-        MIXED --> BROADCAST_ONLY: REMOVE_LOCAL
 
         BROADCAST_ONLY --> LOCAL_ONLY: BROADCAST_LOST
-        MIXED --> LOCAL_ONLY: BROADCAST_LOST
     }
 
     READY --> ACTIVE: START_AUDIO
