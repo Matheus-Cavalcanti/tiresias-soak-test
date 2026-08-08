@@ -394,6 +394,10 @@ or work queue.
 The intended publishers, subscribers, acknowledgement behavior, and delivery constraints
 for these messages are defined in [zbus.md](zbus.md).
 
+The thread assignment, callback boundaries, data-plane workers, priority policy, and
+migration from legacy execution contexts are defined in
+[threads-and-contexts.md](threads-and-contexts.md).
+
 The audio data plane remains separate:
 
 | Information | Transport |
