@@ -37,11 +37,10 @@ flowchart TB
     controller -->|"Control availability"| controlLink
     controller -->|"Reception commands"| broadcast
     controller -->|"Desired listening mode"| codec
-    controller -->|"Indication commands"| led
-
     controlLink -->|"Connection and command events"| controller
     broadcast -->|"Audio Streaming state"| controller
     codec -->|"Codec Controller state and faults"| controller
+    codec -->|"Codec presentation indication"| led
     button -->|"Button events"| controller
 
     broadcast -->|"Stream available or lost"| codec

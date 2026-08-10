@@ -77,7 +77,7 @@ Messages published on this channel request changes to the board's LED indication
 
 ### Publishers
 
-- The Device Controller subsystem is the initial policy publisher.
+- The Codec Controller subsystem publishes indications for its own presentation state.
 - Additional publishers require an explicit indication-ownership or priority policy to
   prevent different subsystems from issuing conflicting LED commands.
 

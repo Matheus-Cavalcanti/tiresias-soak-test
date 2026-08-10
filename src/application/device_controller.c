@@ -6,26 +6,25 @@
 
 #include "device_controller.h"
 
+#include "device_controller_actions.h"
+
 #include "zbus_common.h"
 
 #include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
 #include <zephyr/zbus/zbus.h>
 
-#define DEVICE_CONTROLLER_THREAD_STACK_SIZE 1024
-#define DEVICE_CONTROLLER_THREAD_PRIORITY 3
 #define DEVICE_CONTROLLER_SUBSCRIBER_QUEUE_SIZE 8
 #define DEVICE_CONTROLLER_OBSERVER_PRIORITY 0
 #define DEVICE_CONTROLLER_ZBUS_TIMEOUT_MS 100
+
+LOG_MODULE_REGISTER(device_controller, CONFIG_LOG_DEFAULT_LEVEL);
 
 ZBUS_SUBSCRIBER_DEFINE(device_controller_sub, DEVICE_CONTROLLER_SUBSCRIBER_QUEUE_SIZE);
 
 ZBUS_CHAN_DECLARE(button_chan);
 ZBUS_CHAN_DECLARE(codec_controller_state_chan);
-ZBUS_CHAN_DECLARE(codec_controller_result_chan);
-ZBUS_CHAN_DECLARE(control_link_state_chan);
-ZBUS_CHAN_DECLARE(control_link_event_chan);
 ZBUS_CHAN_DECLARE(audio_streaming_state_chan);
-ZBUS_CHAN_DECLARE(audio_streaming_result_chan);
 
 ZBUS_CHAN_DEFINE(device_controller_cmd_chan, device_controller_cmd_chan_msg, NULL, NULL,
     ZBUS_OBSERVERS(device_controller_sub), ZBUS_MSG_INIT(.cmd = DEVICE_CONTROLLER_CMD_START));
@@ -35,11 +34,7 @@ ZBUS_CHAN_DEFINE(device_controller_state_chan, device_controller_state_chan_msg,
 
 ZBUS_CHAN_ADD_OBS(button_chan, device_controller_sub, DEVICE_CONTROLLER_OBSERVER_PRIORITY);
 ZBUS_CHAN_ADD_OBS(codec_controller_state_chan, device_controller_sub, DEVICE_CONTROLLER_OBSERVER_PRIORITY);
-ZBUS_CHAN_ADD_OBS(codec_controller_result_chan, device_controller_sub, DEVICE_CONTROLLER_OBSERVER_PRIORITY);
-ZBUS_CHAN_ADD_OBS(control_link_state_chan, device_controller_sub, DEVICE_CONTROLLER_OBSERVER_PRIORITY);
-ZBUS_CHAN_ADD_OBS(control_link_event_chan, device_controller_sub, DEVICE_CONTROLLER_OBSERVER_PRIORITY);
 ZBUS_CHAN_ADD_OBS(audio_streaming_state_chan, device_controller_sub, DEVICE_CONTROLLER_OBSERVER_PRIORITY);
-ZBUS_CHAN_ADD_OBS(audio_streaming_result_chan, device_controller_sub, DEVICE_CONTROLLER_OBSERVER_PRIORITY);
 
 static device_controller_state current_state = DEVICE_CONTROLLER_STATE_OFF;
 
@@ -49,7 +44,7 @@ static device_controller_state current_state = DEVICE_CONTROLLER_STATE_OFF;
  * completion deadlines, bounded retries, and escalation policies.
  */
 
-static int __maybe_unused set_state(device_controller_state state)
+static int set_state(device_controller_state state)
 {
   device_controller_state_chan_msg msg = {
     .state = state,
@@ -59,109 +54,221 @@ static int __maybe_unused set_state(device_controller_state state)
     return 0;
   }
 
+  LOG_INF("State transition: %d -> %d", current_state, state);
   current_state = state;
 
   return zbus_chan_pub(&device_controller_state_chan, &msg, K_MSEC(DEVICE_CONTROLLER_ZBUS_TIMEOUT_MS));
 }
 
+/* === Helper Functions === */
+
+static void enter_fault(void)
+{
+  int ret = set_state(DEVICE_CONTROLLER_STATE_FAULT);
+
+  if (ret != 0) {
+    LOG_ERR("Failed to publish FAULT state: %d", ret);
+  }
+}
+
+static int read_codec_controller_state(codec_controller_state* state)
+{
+  codec_controller_state_chan_msg msg;
+  int ret = zbus_chan_read(&codec_controller_state_chan, &msg, K_MSEC(DEVICE_CONTROLLER_ZBUS_TIMEOUT_MS));
+
+  if (ret == 0) {
+    *state = msg.state;
+  }
+
+  return ret;
+}
+
+static int read_audio_streaming_state(audio_streaming_state* state)
+{
+  audio_streaming_state_chan_msg msg;
+  int ret = zbus_chan_read(&audio_streaming_state_chan, &msg, K_MSEC(DEVICE_CONTROLLER_ZBUS_TIMEOUT_MS));
+
+  if (ret == 0) {
+    *state = msg.state;
+  }
+
+  return ret;
+}
+
+static bool streaming_discovery_is_active(audio_streaming_state state)
+{
+  return state == AUDIO_STREAMING_STATE_SCANNING || state == AUDIO_STREAMING_STATE_PA_SYNCED
+      || state == AUDIO_STREAMING_STATE_BIS_SYNCING || state == AUDIO_STREAMING_STATE_STREAMING;
+}
+
+/* === State Handlers === */
+
 static void handle_state_off(const struct zbus_channel* channel)
 {
-  /*
-   * Pseudocode:
-   *
-   * When device is off, ignore the channel and start the
-   * initialization sequence.
-   *
-   * set_state(INITIALIZING)
-   * publish CODEC_CONTROLLER_CMD_INITIALIZE to codec_controller_cmd_chan
-   * publish AUDIO_STREAMING_CMD_ENABLE_RECEIVER to audio_streaming_cmd_chan
-   */
   ARG_UNUSED(channel);
+  int ret;
+
+  ret = set_state(DEVICE_CONTROLLER_STATE_INITIALIZING);
+  if (ret != 0) {
+    LOG_ERR("Failed to publish INITIALIZING state: %d", ret);
+    enter_fault();
+    return;
+  }
+
+  ret = publish_codec_controller_command(CODEC_CONTROLLER_CMD_INITIALIZE);
+  if (ret != 0) {
+    LOG_ERR("Failed to request codec initialization: %d", ret);
+    enter_fault();
+    return;
+  }
+
+  ret = publish_audio_streaming_command(AUDIO_STREAMING_CMD_START_SCAN);
+  if (ret != 0) {
+    LOG_ERR("Failed to request audio streaming startup: %d", ret);
+    enter_fault();
+  }
 }
 
 static void handle_state_initializing(const struct zbus_channel* channel)
 {
-  /*
-   * Pseudocode:
-   *
-   * when any startup state notification arrives:
-   * codec_state = read codec_controller_state_chan
-   * streaming_state = read audio_streaming_state_chan
-   *
-   * if either is ERROR:
-   *   set_state(FAULT)
-   * else if codec is LOCAL_ONLY and streaming discovery is active:
-   *   set_state(OPERATIONAL)
-   */
-  ARG_UNUSED(channel);
+  codec_controller_state codec_state;
+  audio_streaming_state streaming_state;
+  int ret;
+
+  if (channel != &codec_controller_state_chan && channel != &audio_streaming_state_chan) {
+    return;
+  }
+
+  ret = read_codec_controller_state(&codec_state);
+  if (ret != 0) {
+    LOG_ERR("Failed to read Codec Controller state: %d", ret);
+    enter_fault();
+    return;
+  }
+
+  ret = read_audio_streaming_state(&streaming_state);
+  if (ret != 0) {
+    LOG_ERR("Failed to read Audio Streaming state: %d", ret);
+    enter_fault();
+    return;
+  }
+
+  if (codec_state == CODEC_CONTROLLER_STATE_ERROR || streaming_state == AUDIO_STREAMING_STATE_ERROR) {
+    LOG_ERR("A required subsystem failed during initialization");
+    enter_fault();
+    return;
+  }
+
+  if (codec_state != CODEC_CONTROLLER_STATE_LOCAL_ONLY || !streaming_discovery_is_active(streaming_state)) {
+    return;
+  }
+
+  ret = set_state(DEVICE_CONTROLLER_STATE_OPERATIONAL);
+  if (ret != 0) {
+    LOG_ERR("Failed to publish OPERATIONAL state: %d", ret);
+    enter_fault();
+  }
 }
 
 static void handle_state_operational(const struct zbus_channel* channel)
 {
-  /*
-   * Pseudocode:
-   *
-   * if channel is device_controller_cmd_chan:
-   *   log that LOW_POWER, WAKE, POWER_OFF, and RECOVER are deferred
-   *   return
-   *
-   * if channel is button_chan:
-   *   button_event = read button_chan
-   *   if codec_state is LOCAL_ONLY:
-   *     if streaming_state is STREAMING:
-   *       publish SELECT_BROADCAST to codec_controller_cmd_chan
-   *     else:
-   *       log that broadcast audio is not available yet
-   *     return
-   *   if codec_state is BROADCAST_ONLY:
-   *     publish SELECT_LOCAL to codec_controller_cmd_chan
-   *     return
-   *
-   * if channel is codec_controller_state_chan:
-   *   codec_state = read codec_controller_state_chan
-   *   cache codec_state
-   *   if codec_state is ERROR:
-   *     set_state(FAULT)
-   *     return
-   *   if codec_state is LOCAL_ONLY or BROADCAST_ONLY:
-   *     publish the corresponding LED Indicator command
-   *   return
-   *
-   * if channel is audio_streaming_state_chan:
-   *   streaming_state = read audio_streaming_state_chan
-   *   cache streaming_state
-   *   if streaming_state is ERROR:
-   *     set_state(FAULT)
-   *   return
-   *
-   * ignore Control Link and result/event notifications because they are not used
-   * by the PoC
-   */
-  ARG_UNUSED(channel);
+  codec_controller_state codec_state;
+  audio_streaming_state streaming_state;
+  int ret;
+
+  if (channel == &button_chan) {
+    ret = read_codec_controller_state(&codec_state);
+    if (ret != 0) {
+      LOG_ERR("Failed to read Codec Controller state: %d", ret);
+      enter_fault();
+      return;
+    }
+
+    ret = read_audio_streaming_state(&streaming_state);
+    if (ret != 0) {
+      LOG_ERR("Failed to read Audio Streaming state: %d", ret);
+      enter_fault();
+      return;
+    }
+
+    if (codec_state == CODEC_CONTROLLER_STATE_ERROR || streaming_state == AUDIO_STREAMING_STATE_ERROR) {
+      LOG_ERR("A required subsystem reported an error");
+      enter_fault();
+      return;
+    }
+
+    if (codec_state == CODEC_CONTROLLER_STATE_LOCAL_ONLY) {
+      if (streaming_state != AUDIO_STREAMING_STATE_STREAMING) {
+        LOG_INF("Broadcast audio is not available yet");
+        return;
+      }
+
+      ret = publish_codec_controller_command(CODEC_CONTROLLER_CMD_SELECT_BROADCAST);
+      if (ret != 0) {
+        LOG_ERR("Failed to request broadcast audio: %d", ret);
+        enter_fault();
+      }
+      return;
+    }
+
+    if (codec_state == CODEC_CONTROLLER_STATE_BROADCAST_ONLY) {
+      ret = publish_codec_controller_command(CODEC_CONTROLLER_CMD_SELECT_LOCAL);
+      if (ret != 0) {
+        LOG_ERR("Failed to request local audio: %d", ret);
+        enter_fault();
+      }
+      return;
+    }
+
+    LOG_WRN("Codec state %d cannot handle a mode switch", codec_state);
+    return;
+  }
+
+  if (channel == &codec_controller_state_chan) {
+    ret = read_codec_controller_state(&codec_state);
+    if (ret != 0) {
+      LOG_ERR("Failed to read Codec Controller state: %d", ret);
+      enter_fault();
+      return;
+    }
+
+    if (codec_state == CODEC_CONTROLLER_STATE_ERROR) {
+      LOG_ERR("Codec Controller entered ERROR");
+      enter_fault();
+      return;
+    }
+
+    return;
+  }
+
+  if (channel == &audio_streaming_state_chan) {
+    ret = read_audio_streaming_state(&streaming_state);
+    if (ret != 0) {
+      LOG_ERR("Failed to read Audio Streaming state: %d", ret);
+      enter_fault();
+      return;
+    }
+
+    if (streaming_state == AUDIO_STREAMING_STATE_ERROR) {
+      LOG_ERR("Audio Streaming entered ERROR");
+      enter_fault();
+    }
+  }
 }
 
 static void handle_state_low_power(const struct zbus_channel* channel)
 {
-  /*
-   * Pseudocode:
-   *
-   * LOW_POWER is not entered by the initial PoC
-   * log the unexpected notification and leave the state unchanged
-   */
   ARG_UNUSED(channel);
+
+  LOG_WRN("LOW_POWER is not implemented by the PoC");
 }
 
 static void handle_state_fault(const struct zbus_channel* channel)
 {
-  /*
-   * Pseudocode:
-   *
-   * retain the latest subsystem diagnostics
-   * log that the PoC uses fail-stop behavior and requires a device reboot
-   * ignore every notification; RECOVER and POWER_OFF are deferred
-   */
   ARG_UNUSED(channel);
 }
+
+/* === State Machine === */
 
 static void device_controller_state_machine(const struct zbus_channel* channel)
 {
@@ -181,21 +288,36 @@ static void device_controller_state_machine(const struct zbus_channel* channel)
   case DEVICE_CONTROLLER_STATE_FAULT:
     handle_state_fault(channel);
     break;
+  default:
+    LOG_ERR("Unknown Device Controller state: %d", current_state);
+    enter_fault();
+    break;
   }
 }
 
-static void device_controller_thread(void)
+int device_controller_run(void)
 {
+  const device_controller_cmd_chan_msg start_msg = {
+    .cmd = DEVICE_CONTROLLER_CMD_START,
+  };
   const struct zbus_channel* channel;
+  int ret;
+
+  ret = zbus_chan_pub(&device_controller_cmd_chan, &start_msg, K_MSEC(DEVICE_CONTROLLER_ZBUS_TIMEOUT_MS));
+  if (ret != 0) {
+    LOG_ERR("Failed to publish initial START command: %d", ret);
+    return ret;
+  }
+
+  LOG_INF("Running on the main thread");
 
   while (1) {
-    if (zbus_sub_wait(&device_controller_sub, &channel, K_FOREVER) != 0) {
-      continue;
+    ret = zbus_sub_wait(&device_controller_sub, &channel, K_FOREVER);
+    if (ret != 0) {
+      LOG_ERR("Failed to wait for a Device Controller notification: %d", ret);
+      return ret;
     }
 
     device_controller_state_machine(channel);
   }
 }
-
-K_THREAD_DEFINE(device_controller_thread_id, DEVICE_CONTROLLER_THREAD_STACK_SIZE, device_controller_thread, NULL, NULL,
-    NULL, DEVICE_CONTROLLER_THREAD_PRIORITY, 0, 0);

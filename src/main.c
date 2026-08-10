@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
+#include "device_controller.h"
 #include "fw_info_app.h"
 #include "macros_common.h"
 #include "tiresias_dk.h"
@@ -24,5 +25,8 @@ int main(void)
   ret = fw_info_app_print();
   ERR_CHK(ret);
 
-  return 0;
+  ret = device_controller_run();
+  ERR_CHK(ret);
+
+  return ret;
 }
