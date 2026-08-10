@@ -106,8 +106,9 @@ also receive remote codec-configuration requests.
 Bluetooth callbacks must not perform codec operations. A callback validates and copies the
 request into an owned queue or message, wakes the Control Link thread, and returns. The
 Control Link thread can then parse the request, apply connection and authorization policy,
-forward a semantic command to the appropriate owner, correlate the eventual result, and
-send the remote response.
+forward a semantic command to the appropriate owner, and send the remote response. The
+initial implementation serializes this flow without explicit command correlation;
+correlation identifiers may be introduced when remote requests can overlap.
 
 Keeping this work separate prevents a burst of GATT operations from delaying PA or BIS
 lifecycle events in the Audio Streaming subsystem.
@@ -238,6 +239,11 @@ Before release:
 
 Sleeping threads do not create meaningful CPU load. Consolidating threads should therefore
 be driven by measured RAM pressure or simpler synchronization, not by thread count alone.
+
+The first control-plane implementation intentionally omits per-destination outstanding
+commands, command/result correlation, stale-result detection, deadlines, bounded retries,
+and escalation policies. These reliability guardrails are future work after the lifecycle
+flow is validated; [zbus.md](zbus.md) defines the staged delivery policy.
 
 ## Migration from the current implementation
 

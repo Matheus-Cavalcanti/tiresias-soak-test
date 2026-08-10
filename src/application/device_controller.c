@@ -43,6 +43,12 @@ ZBUS_CHAN_ADD_OBS(audio_streaming_result_chan, device_controller_sub, DEVICE_CON
 
 static device_controller_state current_state = DEVICE_CONTROLLER_STATE_OFF;
 
+/*
+ * TODO: After the initial control flow is validated, add per-destination
+ * outstanding-command tracking, result correlation, stale-result detection,
+ * completion deadlines, bounded retries, and escalation policies.
+ */
+
 static int __maybe_unused set_state(device_controller_state state)
 {
   device_controller_state_chan_msg msg = {
@@ -63,24 +69,12 @@ static void handle_state_off(const struct zbus_channel* channel)
   /*
    * Pseudocode:
    *
-   * if channel is not device_controller_cmd_chan:
-   *   ignore the notification
-   *   return
-   *
-   * command = read device_controller_cmd_chan
-   * if command is not START:
-   *   log that the command is invalid while OFF
-   *   return
+   * When device is off, ignore the channel and start the
+   * initialization sequence.
    *
    * set_state(INITIALIZING)
-   *
-   * request the required subsystems to start in dependency order:
-   *   publish INITIALIZE to codec_controller_cmd_chan
-   *   publish ENABLE_CONTROL to control_link_cmd_chan
-   *   publish ENABLE_RECEIVER to audio_streaming_cmd_chan
-   *
-   * mark one initialization command as outstanding for each subsystem
-   * wait for subsystem state notifications to report completion
+   * publish CODEC_CONTROLLER_CMD_INITIALIZE to codec_controller_cmd_chan
+   * publish AUDIO_STREAMING_CMD_ENABLE_RECEIVER to audio_streaming_cmd_chan
    */
   ARG_UNUSED(channel);
 }
@@ -90,41 +84,13 @@ static void handle_state_initializing(const struct zbus_channel* channel)
   /*
    * Pseudocode:
    *
-   * if channel is codec_controller_state_chan:
-   *   codec_state = read codec_controller_state_chan
-   *   update the cached codec readiness snapshot
-   *   if codec_state is ERROR:
-   *     set_state(FAULT)
-   *     return
+   * when any startup state notification arrives:
+   * codec_state = read codec_controller_state_chan
+   * streaming_state = read audio_streaming_state_chan
    *
-   * if channel is control_link_state_chan:
-   *   control_link_state = read control_link_state_chan
-   *   update the cached Control Link readiness snapshot
-   *   if control_link_state is ERROR:
-   *     set_state(FAULT)
-   *     return
-   *
-   * if channel is audio_streaming_state_chan:
-   *   streaming_state = read audio_streaming_state_chan
-   *   update the cached Audio Streaming readiness snapshot
-   *   if streaming_state is ERROR:
-   *     set_state(FAULT)
-   *     return
-   *
-   * if channel is a subsystem result/event channel:
-   *   result = read the triggering channel
-   *   if an initialization command was rejected or failed:
-   *     set_state(FAULT)
-   *     return
-   *
-   * if channel is device_controller_cmd_chan:
-   *   read the command
-   *   reject it because no lifecycle command is valid while INITIALIZING
-   *   return
-   *
-   * if every required subsystem reports its ready condition:
-   *   publish START_AUDIO to codec_controller_cmd_chan
-   *   publish START_SCAN to audio_streaming_cmd_chan
+   * if either is ERROR:
+   *   set_state(FAULT)
+   * else if codec is LOCAL_ONLY and streaming discovery is active:
    *   set_state(OPERATIONAL)
    */
   ARG_UNUSED(channel);
@@ -136,48 +102,40 @@ static void handle_state_operational(const struct zbus_channel* channel)
    * Pseudocode:
    *
    * if channel is device_controller_cmd_chan:
-   *   command = read device_controller_cmd_chan
-   *
-   *   if command is LOW_POWER:
-   *     publish STOP_CODEC to codec_controller_cmd_chan
-   *     publish STOP to audio_streaming_cmd_chan
-   *     apply the configured Control Link low-power policy
-   *     wait for the required completion state reports
-   *     set_state(LOW_POWER)
-   *     return
-   *
-   *   if command is POWER_OFF:
-   *     publish STOP_CODEC and POWER_DOWN to codec_controller_cmd_chan in order
-   *     publish STOP and DISABLE_RECEIVER to audio_streaming_cmd_chan in order
-   *     publish DISABLE_CONTROL to control_link_cmd_chan
-   *     wait for OFF and DISABLED state reports
-   *     set_state(OFF)
-   *     return
-   *
-   *   reject every other lifecycle command
+   *   log that LOW_POWER, WAKE, POWER_OFF, and RECOVER are deferred
    *   return
    *
    * if channel is button_chan:
    *   button_event = read button_chan
-   *   translate the semantic button event into device policy
-   *   publish an explicit SELECT_LOCAL or SELECT_BROADCAST command to
-   *     codec_controller_cmd_chan
-   *   wait for the Codec Controller state or result notification
-   *   publish the corresponding LED Indicator command
+   *   if codec_state is LOCAL_ONLY:
+   *     if streaming_state is STREAMING:
+   *       publish SELECT_BROADCAST to codec_controller_cmd_chan
+   *     else:
+   *       log that broadcast audio is not available yet
+   *     return
+   *   if codec_state is BROADCAST_ONLY:
+   *     publish SELECT_LOCAL to codec_controller_cmd_chan
+   *     return
+   *
+   * if channel is codec_controller_state_chan:
+   *   codec_state = read codec_controller_state_chan
+   *   cache codec_state
+   *   if codec_state is ERROR:
+   *     set_state(FAULT)
+   *     return
+   *   if codec_state is LOCAL_ONLY or BROADCAST_ONLY:
+   *     publish the corresponding LED Indicator command
    *   return
    *
-   * if channel is any subsystem state channel:
-   *   state = read the triggering state channel
-   *   update the corresponding cached snapshot
-   *   if a required subsystem reports ERROR:
+   * if channel is audio_streaming_state_chan:
+   *   streaming_state = read audio_streaming_state_chan
+   *   cache streaming_state
+   *   if streaming_state is ERROR:
    *     set_state(FAULT)
    *   return
    *
-   * if channel is any subsystem result/event channel:
-   *   result = read the triggering result/event channel
-   *   clear the matching outstanding command
-   *   retry, reject the originating policy request, or transition to FAULT
-   *     according to whether the failure is recoverable
+   * ignore Control Link and result/event notifications because they are not used
+   * by the PoC
    */
   ARG_UNUSED(channel);
 }
@@ -187,37 +145,8 @@ static void handle_state_low_power(const struct zbus_channel* channel)
   /*
    * Pseudocode:
    *
-   * if channel is device_controller_cmd_chan:
-   *   command = read device_controller_cmd_chan
-   *
-   *   if command is WAKE:
-   *     restore the configured Control Link policy
-   *     publish ENABLE_RECEIVER to audio_streaming_cmd_chan if it was disabled
-   *     publish START_AUDIO to codec_controller_cmd_chan
-   *     wait until every required subsystem reports its operational condition
-   *     set_state(OPERATIONAL)
-   *     return
-   *
-   *   if command is POWER_OFF:
-   *     publish POWER_DOWN to codec_controller_cmd_chan
-   *     publish DISABLE_RECEIVER to audio_streaming_cmd_chan
-   *     publish DISABLE_CONTROL to control_link_cmd_chan
-   *     wait for OFF and DISABLED state reports
-   *     set_state(OFF)
-   *     return
-   *
-   *   reject every other lifecycle command
-   *   return
-   *
-   * if channel is any subsystem state channel:
-   *   state = read the triggering state channel
-   *   update the corresponding cached snapshot
-   *   if a required subsystem reports an unrecoverable ERROR:
-   *     set_state(FAULT)
-   *   return
-   *
-   * if channel is any subsystem result/event channel:
-   *   process the outcome of the outstanding suspend, wake, or shutdown command
+   * LOW_POWER is not entered by the initial PoC
+   * log the unexpected notification and leave the state unchanged
    */
   ARG_UNUSED(channel);
 }
@@ -227,28 +156,9 @@ static void handle_state_fault(const struct zbus_channel* channel)
   /*
    * Pseudocode:
    *
-   * if channel is not device_controller_cmd_chan:
-   *   retain subsystem diagnostics for recovery
-   *   ignore the notification
-   *   return
-   *
-   * command = read device_controller_cmd_chan
-   *
-   * if command is RECOVER:
-   *   publish RESET to codec_controller_cmd_chan
-   *   publish RESET to control_link_cmd_chan
-   *   publish RESET to audio_streaming_cmd_chan
-   *   clear cached readiness and outstanding-command tracking
-   *   set_state(INITIALIZING)
-   *   wait for subsystem state notifications to report recovery completion
-   *   return
-   *
-   * if command is POWER_OFF:
-   *   request best-effort shutdown of all subsystems
-   *   set_state(OFF)
-   *   return
-   *
-   * reject every other lifecycle command
+   * retain the latest subsystem diagnostics
+   * log that the PoC uses fail-stop behavior and requires a device reboot
+   * ignore every notification; RECOVER and POWER_OFF are deferred
    */
   ARG_UNUSED(channel);
 }

@@ -62,16 +62,16 @@ static void handle_state_disabled(const struct zbus_channel* channel)
    *   return
    *
    * command = read audio_streaming_cmd_chan
-   * if command is not ENABLE_RECEIVER:
-   *   publish COMMAND_REJECTED on audio_streaming_result_chan
+   * if command is not START_SCAN:
+   *   log that only START_SCAN is supported while DISABLED by the PoC
    *   return
    *
-   * initialize the LE Audio receiver and BIS data path
+   * result = audio_streaming_actions_start()
+   *   this action initializes the receiver and BIS data path, then starts scanning
    *
-   * if initialization succeeds:
-   *   set_state(IDLE)
+   * if result succeeds:
+   *   set_state(SCANNING)
    * else:
-   *   publish OPERATION_FAILED on audio_streaming_result_chan
    *   set_state(ERROR)
    */
   ARG_UNUSED(channel);
@@ -89,23 +89,18 @@ static void handle_state_idle(const struct zbus_channel* channel)
    * command = read audio_streaming_cmd_chan
    *
    * if command is START_SCAN:
-   *   start scanning for a suitable broadcast source
-   *   if scanning starts successfully:
+   *   result = audio_streaming_actions_start_scan()
+   *   if result succeeds:
    *     set_state(SCANNING)
    *   else:
-   *     publish OPERATION_FAILED on audio_streaming_result_chan
-   *   return
-   *
-   * if command is DISABLE_RECEIVER:
-   *   disable the LE Audio receiver
-   *   if the operation succeeds:
-   *     set_state(DISABLED)
-   *   else:
-   *     publish OPERATION_FAILED on audio_streaming_result_chan
    *     set_state(ERROR)
    *   return
    *
-   * publish COMMAND_REJECTED on audio_streaming_result_chan
+   * if command is STOP:
+   *   reception is already stopped; do nothing
+   *   return
+   *
+   * log that every other command is deferred or invalid for the PoC
    */
   ARG_UNUSED(channel);
 }
@@ -123,7 +118,7 @@ static void handle_state_scanning(const struct zbus_channel* channel)
    *     set_state(PA_SYNCED)
    *     return
    *
-   *   if event represents a fatal Bluetooth failure:
+   *   if event represents a Bluetooth failure:
    *     set_state(ERROR)
    *   return
    *
@@ -132,16 +127,15 @@ static void handle_state_scanning(const struct zbus_channel* channel)
    *   return
    *
    * command = read audio_streaming_cmd_chan
-   * if command is STOP_SCAN:
-   *   stop scanning
-   *   if the operation succeeds:
+   * if command is STOP:
+   *   result = audio_streaming_actions_stop()
+   *   if result succeeds:
    *     set_state(IDLE)
    *   else:
-   *     publish OPERATION_FAILED on audio_streaming_result_chan
    *     set_state(ERROR)
    *   return
    *
-   * publish COMMAND_REJECTED on audio_streaming_result_chan
+   * log that STOP_SCAN, DISABLE_RECEIVER, and RESET are deferred
    */
   ARG_UNUSED(channel);
 }
@@ -154,29 +148,39 @@ static void handle_state_pa_synced(const struct zbus_channel* channel)
    * if channel is le_audio_chan:
    *   event = read le_audio_chan
    *   if event contains a valid selected BASE configuration:
-   *     begin BIG/BIS synchronization
-   *     if synchronization starts successfully:
+   *     result = audio_streaming_actions_start_bis_sync()
+   *     if result succeeds:
    *       set_state(BIS_SYNCING)
    *     else:
-   *       publish OPERATION_FAILED on audio_streaming_result_chan
-   *       set_state(RECOVERING)
+   *       result = audio_streaming_actions_restart_scan()
+   *       if result succeeds:
+   *         set_state(SCANNING)
+   *       else:
+   *         set_state(ERROR)
    *   return
    *
    * if channel is bt_mgmt_chan:
    *   event = read bt_mgmt_chan
    *   if event is PA_SYNC_LOST:
-   *     set_state(RECOVERING)
-   *   else if event represents a fatal Bluetooth failure:
+   *     result = audio_streaming_actions_restart_scan()
+   *     if result succeeds:
+   *       set_state(SCANNING)
+   *     else:
+   *       set_state(ERROR)
+   *   else if event represents a Bluetooth failure:
    *     set_state(ERROR)
    *   return
    *
    * if channel is audio_streaming_cmd_chan:
    *   command = read audio_streaming_cmd_chan
    *   if command is STOP:
-   *     stop synchronization and clean up the selected source
-   *     set_state(IDLE)
+   *     result = audio_streaming_actions_stop()
+   *     if result succeeds:
+   *       set_state(IDLE)
+   *     else:
+   *       set_state(ERROR)
    *   else:
-   *     publish COMMAND_REJECTED on audio_streaming_result_chan
+   *     log that every other command is deferred or invalid for the PoC
    */
   ARG_UNUSED(channel);
 }
@@ -194,26 +198,37 @@ static void handle_state_bis_syncing(const struct zbus_channel* channel)
    *     return
    *
    *   if event is BIS_SYNC_FAILED or reports no valid configuration:
-   *     set_state(RECOVERING)
-   *   else if event represents a fatal Bluetooth failure:
+   *     result = audio_streaming_actions_restart_scan()
+   *     if result succeeds:
+   *       set_state(SCANNING)
+   *     else:
+   *       set_state(ERROR)
+   *   else if event represents a Bluetooth failure:
    *     set_state(ERROR)
    *   return
    *
    * if channel is bt_mgmt_chan:
    *   event = read bt_mgmt_chan
    *   if event is PA_SYNC_LOST:
-   *     set_state(RECOVERING)
-   *   else if event represents a fatal Bluetooth failure:
+   *     result = audio_streaming_actions_restart_scan()
+   *     if result succeeds:
+   *       set_state(SCANNING)
+   *     else:
+   *       set_state(ERROR)
+   *   else if event represents a Bluetooth failure:
    *     set_state(ERROR)
    *   return
    *
    * if channel is audio_streaming_cmd_chan:
    *   command = read audio_streaming_cmd_chan
    *   if command is STOP:
-   *     cancel synchronization and clean up the selected source
-   *     set_state(IDLE)
+   *     result = audio_streaming_actions_stop()
+   *     if result succeeds:
+   *       set_state(IDLE)
+   *     else:
+   *       set_state(ERROR)
    *   else:
-   *     publish COMMAND_REJECTED on audio_streaming_result_chan
+   *     log that every other command is deferred or invalid for the PoC
    */
   ARG_UNUSED(channel);
 }
@@ -226,28 +241,40 @@ static void handle_state_streaming(const struct zbus_channel* channel)
    * if channel is le_audio_chan:
    *   event = read le_audio_chan
    *   if event is BIS_STOPPED or synchronization is lost:
-   *     stop forwarding received ISO data
-   *     set_state(RECOVERING)
-   *   else if event represents a fatal Bluetooth failure:
+   *     result = audio_streaming_actions_restart_scan()
+   *       this action stops ISO forwarding, cleans up synchronization, and restarts scanning
+   *     if result succeeds:
+   *       set_state(SCANNING)
+   *       the Codec Controller observes this state and falls back to local audio
+   *     else:
+   *       set_state(ERROR)
+   *   else if event represents a Bluetooth failure:
    *     set_state(ERROR)
    *   return
    *
    * if channel is bt_mgmt_chan:
    *   event = read bt_mgmt_chan
    *   if event is PA_SYNC_LOST:
-   *     stop forwarding received ISO data
-   *     set_state(RECOVERING)
-   *   else if event represents a fatal Bluetooth failure:
+   *     result = audio_streaming_actions_restart_scan()
+   *     if result succeeds:
+   *       set_state(SCANNING)
+   *       the Codec Controller observes this state and falls back to local audio
+   *     else:
+   *       set_state(ERROR)
+   *   else if event represents a Bluetooth failure:
    *     set_state(ERROR)
    *   return
    *
    * if channel is audio_streaming_cmd_chan:
    *   command = read audio_streaming_cmd_chan
    *   if command is STOP:
-   *     stop streaming and clean up synchronization
-   *     set_state(IDLE)
+   *     result = audio_streaming_actions_stop()
+   *     if result succeeds:
+   *       set_state(IDLE)
+   *     else:
+   *       set_state(ERROR)
    *   else:
-   *     publish COMMAND_REJECTED on audio_streaming_result_chan
+   *     log that every other command is deferred or invalid for the PoC
    */
   ARG_UNUSED(channel);
 }
@@ -257,26 +284,9 @@ static void handle_state_recovering(const struct zbus_channel* channel)
   /*
    * Pseudocode:
    *
-   * if channel is audio_streaming_cmd_chan:
-   *   command = read audio_streaming_cmd_chan
-   *   if command is STOP:
-   *     cancel retry and finish synchronization cleanup
-   *     set_state(IDLE)
-   *   else:
-   *     publish COMMAND_REJECTED on audio_streaming_result_chan
-   *   return
-   *
-   * if channel reports that cleanup is complete and retry is permitted:
-   *   restart broadcast scanning
-   *   if scanning starts successfully:
-   *     set_state(SCANNING)
-   *   else:
-   *     publish OPERATION_FAILED on audio_streaming_result_chan
-   *     set_state(ERROR)
-   *   return
-   *
-   * if channel reports a fatal Bluetooth failure:
-   *   set_state(ERROR)
+   * RECOVERING is not entered by the initial PoC
+   * recoverable synchronization loss performs one immediate cleanup and scan restart
+   * log the unexpected notification and leave the state unchanged
    */
   ARG_UNUSED(channel);
 }
@@ -286,22 +296,9 @@ static void handle_state_error(const struct zbus_channel* channel)
   /*
    * Pseudocode:
    *
-   * if channel is not audio_streaming_cmd_chan:
-   *   retain Bluetooth and synchronization diagnostics
-   *   ignore the notification
-   *   return
-   *
-   * command = read audio_streaming_cmd_chan
-   * if command is not RESET:
-   *   publish COMMAND_REJECTED on audio_streaming_result_chan
-   *   return
-   *
-   * clean up and reset the LE Audio receiver
-   *
-   * if recovery succeeds:
-   *   set_state(IDLE)
-   * else:
-   *   publish OPERATION_FAILED on audio_streaming_result_chan
+   * retain Bluetooth and synchronization diagnostics
+   * log that the PoC uses fail-stop behavior and requires a device reboot
+   * ignore every notification; RESET and recovery are deferred
    */
   ARG_UNUSED(channel);
 }

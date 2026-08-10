@@ -60,18 +60,17 @@ static void handle_state_off(const struct zbus_channel* channel)
    *   return
    *
    * command = read codec_controller_cmd_chan
-   * if command is not INITIALIZE:
-   *   publish COMMAND_REJECTED on codec_controller_result_chan
+   * if command is not CODEC_CONTROLLER_CMD_INITIALIZE:
+   *   log that only CODEC_CONTROLLER_CMD_INITIALIZE is supported while OFF by the PoC
    *   return
    *
    * set_state(INITIALIZING)
-   * reset and boot the codec
-   * program the initial codec configuration
+   * result = codec_controller_actions_start_local()
+   *   this action resets, initializes, and starts the local audio path
    *
-   * if initialization succeeds:
-   *   set_state(READY)
+   * if result succeeds:
+   *   set_state(LOCAL_ONLY)
    * else:
-   *   publish OPERATION_FAILED on codec_controller_result_chan
    *   set_state(ERROR)
    */
   ARG_UNUSED(channel);
@@ -82,46 +81,8 @@ static void handle_state_initializing(const struct zbus_channel* channel)
   /*
    * Pseudocode:
    *
-   * if channel is codec_controller_cmd_chan:
-   *   command = read codec_controller_cmd_chan
-   *   publish COMMAND_REJECTED on codec_controller_result_chan
-   *   return
-   *
-   * ignore every other notification while initialization is in progress
-   */
-  ARG_UNUSED(channel);
-}
-
-static void handle_state_ready(const struct zbus_channel* channel)
-{
-  /*
-   * Pseudocode:
-   *
-   * if channel is not codec_controller_cmd_chan:
-   *   ignore the notification
-   *   return
-   *
-   * command = read codec_controller_cmd_chan
-   *
-   * if command is START_AUDIO:
-   *   configure and start the local microphone and DSP path
-   *   if the operation succeeds:
-   *     set_state(LOCAL_ONLY)
-   *   else:
-   *     publish OPERATION_FAILED on codec_controller_result_chan
-   *     set_state(ERROR)
-   *   return
-   *
-   * if command is POWER_DOWN:
-   *   power down the codec
-   *   if the operation succeeds:
-   *     set_state(OFF)
-   *   else:
-   *     publish OPERATION_FAILED on codec_controller_result_chan
-   *     set_state(ERROR)
-   *   return
-   *
-   * publish COMMAND_REJECTED on codec_controller_result_chan
+   * initialization runs synchronously in codec_controller_actions_start_local()
+   * log and ignore any unexpected notification while it is in progress
    */
   ARG_UNUSED(channel);
 }
@@ -132,7 +93,7 @@ static void handle_state_local_only(const struct zbus_channel* channel)
    * Pseudocode:
    *
    * if channel is audio_streaming_state_chan:
-   *   ignore the notification because the local path is already selected
+   *   cache whether Audio Streaming is STREAMING
    *   return
    *
    * if channel is not codec_controller_cmd_chan:
@@ -144,27 +105,21 @@ static void handle_state_local_only(const struct zbus_channel* channel)
    * if command is SELECT_BROADCAST:
    *   read the latest audio_streaming_state_chan value
    *   if Audio Streaming is not STREAMING:
-   *     publish COMMAND_REJECTED on codec_controller_result_chan
+   *     log that broadcast audio is unavailable and remain LOCAL_ONLY
    *     return
    *
-   *   configure the codec to present only the broadcast input
-   *   if the operation succeeds:
+   *   result = codec_controller_actions_select_broadcast()
+   *   if result succeeds:
    *     set_state(BROADCAST_ONLY)
    *   else:
-   *     publish OPERATION_FAILED on codec_controller_result_chan
    *     set_state(ERROR)
    *   return
    *
-   * if command is STOP_CODEC:
-   *   stop audio presentation
-   *   if the operation succeeds:
-   *     set_state(READY)
-   *   else:
-   *     publish OPERATION_FAILED on codec_controller_result_chan
-   *     set_state(ERROR)
+   * if command is SELECT_LOCAL:
+   *   local audio is already selected; do nothing
    *   return
    *
-   * publish COMMAND_REJECTED on codec_controller_result_chan
+   * log that every other command is deferred or invalid for the PoC
    */
   ARG_UNUSED(channel);
 }
@@ -177,8 +132,8 @@ static void handle_state_broadcast_only(const struct zbus_channel* channel)
    * if channel is audio_streaming_state_chan:
    *   streaming_state = read audio_streaming_state_chan
    *   if streaming_state is not STREAMING:
-   *     configure the codec to present only the local microphone and DSP path
-   *     if the operation succeeds:
+   *     result = codec_controller_actions_select_local()
+   *     if result succeeds:
    *       set_state(LOCAL_ONLY)
    *     else:
    *       set_state(ERROR)
@@ -191,24 +146,18 @@ static void handle_state_broadcast_only(const struct zbus_channel* channel)
    * command = read codec_controller_cmd_chan
    *
    * if command is SELECT_LOCAL:
-   *   configure the codec to present only the local microphone and DSP path
-   *   if the operation succeeds:
+   *   result = codec_controller_actions_select_local()
+   *   if result succeeds:
    *     set_state(LOCAL_ONLY)
    *   else:
-   *     publish OPERATION_FAILED on codec_controller_result_chan
    *     set_state(ERROR)
    *   return
    *
-   * if command is STOP_CODEC:
-   *   stop audio presentation
-   *   if the operation succeeds:
-   *     set_state(READY)
-   *   else:
-   *     publish OPERATION_FAILED on codec_controller_result_chan
-   *     set_state(ERROR)
+   * if command is SELECT_BROADCAST:
+   *   broadcast audio is already selected; do nothing
    *   return
    *
-   * publish COMMAND_REJECTED on codec_controller_result_chan
+   * log that every other command is deferred or invalid for the PoC
    */
   ARG_UNUSED(channel);
 }
@@ -218,24 +167,9 @@ static void handle_state_error(const struct zbus_channel* channel)
   /*
    * Pseudocode:
    *
-   * if channel is not codec_controller_cmd_chan:
-   *   retain codec diagnostics
-   *   ignore the notification
-   *   return
-   *
-   * command = read codec_controller_cmd_chan
-   * if command is not RESET:
-   *   publish COMMAND_REJECTED on codec_controller_result_chan
-   *   return
-   *
-   * set_state(INITIALIZING)
-   * reset and reinitialize the codec
-   *
-   * if recovery succeeds:
-   *   set_state(READY)
-   * else:
-   *   publish OPERATION_FAILED on codec_controller_result_chan
-   *   set_state(ERROR)
+   * retain codec diagnostics
+   * log that the PoC uses fail-stop behavior and requires a device reboot
+   * ignore every notification; RESET and recovery are deferred
    */
   ARG_UNUSED(channel);
 }
@@ -248,9 +182,6 @@ static void codec_controller_state_machine(const struct zbus_channel* channel)
     break;
   case CODEC_CONTROLLER_STATE_INITIALIZING:
     handle_state_initializing(channel);
-    break;
-  case CODEC_CONTROLLER_STATE_READY:
-    handle_state_ready(channel);
     break;
   case CODEC_CONTROLLER_STATE_LOCAL_ONLY:
     handle_state_local_only(channel);

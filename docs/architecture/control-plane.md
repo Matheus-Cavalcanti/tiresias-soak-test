@@ -103,6 +103,30 @@ private state and publishes the mirror only after the transition has been accept
 publication fails, the private state remains authoritative and the owning subsystem handles
 the stale mirror as a reporting failure rather than recovering state by reading the channel.
 
+### Initial command-progress model
+
+The first implementation uses optimistic commands with authoritative state reports. A
+publisher requests an operation once and assumes that the receiving subsystem accepted it
+unless a result event reports failure. The Device Controller caches subsystem state reports
+and uses those observable conditions to determine when initialization or a lifecycle
+transition has completed.
+
+This initial model intentionally does not maintain per-subsystem outstanding-command
+records or correlate every result with stored command metadata. A single lifecycle target
+or phase may be retained when the Device Controller must wait for several subsystem states,
+but the subsystem state channels remain the source of completion information.
+
+Commands that request a terminal condition own their internal sequence. For example,
+`POWER_DOWN` tells the Codec Controller to stop presentation if necessary and reach `OFF`;
+`STOP` tells Audio Streaming to stop any active reception procedure and reach `IDLE`; and
+`DISABLE_RECEIVER` tells Audio Streaming to stop any active procedure, clean up, and reach
+`DISABLED`. This avoids publishing multiple commands back-to-back on the same latest-value
+Zbus channel.
+
+Future reliability guardrails are deferred until the control flow is stable. They include
+per-destination outstanding-command tracking, command/result correlation, stale-result
+detection, deadlines, retries, and escalation policies.
+
 ## 1. Device Controller subsystem
 
 ### Why it exists
@@ -225,7 +249,10 @@ stateDiagram-v2
     PA_SYNCED --> BIS_SYNCING: VALID_BASE_SELECTED
     BIS_SYNCING --> STREAMING: BIS_STARTED
 
-    SCANNING --> IDLE: STOP_SCAN
+    SCANNING --> IDLE: STOP_SCAN or STOP
+    PA_SYNCED --> IDLE: STOP
+    BIS_SYNCING --> IDLE: STOP
+    STREAMING --> IDLE: STOP
     PA_SYNCED --> RECOVERING: PA_SYNC_LOST
     BIS_SYNCING --> RECOVERING: BIS_SYNC_FAILED
     STREAMING --> RECOVERING: BIS_STOPPED
@@ -233,6 +260,11 @@ stateDiagram-v2
     RECOVERING --> IDLE: STOP
 
     IDLE --> DISABLED: DISABLE_RECEIVER
+    SCANNING --> DISABLED: DISABLE_RECEIVER
+    PA_SYNCED --> DISABLED: DISABLE_RECEIVER
+    BIS_SYNCING --> DISABLED: DISABLE_RECEIVER
+    STREAMING --> DISABLED: DISABLE_RECEIVER
+    RECOVERING --> DISABLED: DISABLE_RECEIVER
     SCANNING --> ERROR: FATAL_BT_ERROR
     PA_SYNCED --> ERROR: FATAL_BT_ERROR
     BIS_SYNCING --> ERROR: FATAL_BT_ERROR
@@ -269,8 +301,7 @@ audio frames.
 | State | Meaning |
 |---|---|
 | `OFF` | The codec is powered down or not initialized. |
-| `INITIALIZING` | Reset, boot, and initial programming are in progress. |
-| `READY` | The codec is configured and available but not presenting audio. |
+| `INITIALIZING` | Reset, boot, initial programming, and local-path startup are in progress. |
 | `ACTIVE` | Parent state for modes in which the codec presents audio. |
 | `LOCAL_ONLY` | The local microphone and DSP path is presented at the analog output. |
 | `BROADCAST_ONLY` | The received broadcast path is presented at the analog output. |
@@ -280,7 +311,7 @@ audio frames.
 stateDiagram-v2
     [*] --> OFF
     OFF --> INITIALIZING: INITIALIZE
-    INITIALIZING --> READY: INITIALIZATION_COMPLETE
+    INITIALIZING --> ACTIVE: INITIALIZATION_COMPLETE
     INITIALIZING --> ERROR: INITIALIZATION_FAILED
 
     state ACTIVE {
@@ -291,22 +322,22 @@ stateDiagram-v2
         BROADCAST_ONLY --> LOCAL_ONLY: BROADCAST_LOST
     }
 
-    READY --> ACTIVE: START_AUDIO
-    ACTIVE --> READY: STOP_CODEC
-
-    READY --> OFF: POWER_DOWN
+    ACTIVE --> OFF: POWER_DOWN
     ACTIVE --> ERROR: CODEC_FAULT
-    READY --> ERROR: COMMUNICATION_FAILURE
     ERROR --> INITIALIZING: RESET
 ```
 
 `ACTIVE` is a hierarchical parent state. Its substates express what reaches the analog
-output, while transitions defined on `ACTIVE`, such as `STOP_CODEC` or `CODEC_FAULT`, apply
+output, while transitions defined on `ACTIVE`, such as `POWER_DOWN` or `CODEC_FAULT`, apply
 to every presentation mode.
 
+`POWER_DOWN` is a semantic request to reach `OFF`. When received in an active presentation
+state, the Codec Controller performs the required stop and power-down actions internally
+before reporting `OFF`.
+
 Codec configuration and parameter operations are short and synchronous at this stage. The
-Codec Controller subsystem handles them as transition actions or events within `READY` or
-the current `ACTIVE` substate rather than modeling them as a persistent state.
+Codec Controller subsystem handles them as transition actions or events within the current
+`ACTIVE` substate rather than modeling them as a persistent state.
 
 ## Coordination example
 
@@ -391,7 +422,7 @@ callbacks should capture the required information, enqueue or publish an event, 
 Blocking I2C transactions and longer operations should run in the owning subsystem thread
 or work queue.
 
-The intended publishers, subscribers, acknowledgement behavior, and delivery constraints
+The intended publishers, subscribers, completion reporting, and delivery constraints
 for these messages are defined in [zbus.md](zbus.md).
 
 The thread assignment, callback boundaries, data-plane workers, priority policy, and

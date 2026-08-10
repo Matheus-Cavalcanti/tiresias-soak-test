@@ -21,19 +21,37 @@ remain in the data plane and must not be transported through these channels.
 - The Device Controller subsystem statically observes subsystem state channels so
   initialization, completion, and fault transitions wake the supervisor. Other subsystems
   may read the cached value without subscribing when they only need a snapshot.
-- A successful command that changes durable state is acknowledged by the corresponding
-  state report. A rejected command or a nonfatal failure that leaves the state unchanged is
-  reported on the subsystem's result-event channel.
+- Completion of a successful command that changes durable state is visible in the
+  corresponding state report. A rejected command or a nonfatal failure that leaves the
+  state unchanged is reported on the subsystem's result-event channel.
 - `ERROR` or `FAULT` states are reserved for persistent subsystem or device failures. A
   rejected command does not by itself place a state machine in an error state.
 - A failed state publication does not transfer authority to the stale channel value. The
   owning subsystem retains its private state and treats publication failure as a reporting
   fault that must be logged, retried, or escalated according to subsystem policy.
 - At this initial stage, each command channel targeting another subsystem has one policy
-  publisher: the Device Controller subsystem. Publishers serialize commands and allow only
-  one unacknowledged command per destination. If commands or events later need burst
-  delivery, their payloads must use a queued delivery mechanism rather than relying on a
-  channel's latest value.
+  publisher: the Device Controller subsystem. It publishes one semantic request for the
+  desired condition and observes state channels for completion. The first implementation
+  does not keep per-destination outstanding-command records or correlate results with
+  stored command metadata.
+- Multiple commands must not be published back-to-back on the same latest-value channel.
+  A terminal request such as `POWER_DOWN`, `STOP`, or `DISABLE_RECEIVER` makes the receiving
+  subsystem responsible for its internal stop and cleanup sequence.
+- If commands or events later need burst delivery, their payloads must use a queued
+  delivery mechanism rather than relying on a channel's latest value.
+
+### Future reliability guardrails
+
+After the initial control flow is validated, consider adding:
+
+- one outstanding-command record per destination;
+- command/result correlation and stale-result rejection;
+- completion deadlines and timeout events;
+- bounded retry policies; and
+- escalation rules for repeated or unrecoverable failures.
+
+These guardrails must not change state ownership: state channels remain mirrors of the
+receiving subsystem's private state.
 
 ## Button Input event
 
@@ -99,8 +117,10 @@ subsystem. The subsystem's private state remains authoritative.
 ## Codec Controller command
 
 Messages on this channel request behavior from the Codec Controller subsystem. Initial
-commands include `INITIALIZE`, `START_AUDIO`, `SELECT_LOCAL`, `SELECT_BROADCAST`,
-`STOP_CODEC`, `POWER_DOWN`, and `RESET`.
+commands include `INITIALIZE`, `SELECT_LOCAL`, `SELECT_BROADCAST`, `POWER_DOWN`, and
+`RESET`. `INITIALIZE` configures the codec and starts the local audio path, reaching
+`LOCAL_ONLY`. `POWER_DOWN` is a terminal semantic request: when necessary, the Codec
+Controller stops presentation internally before reporting `OFF`.
 
 ### Subscribers and listeners
 
@@ -113,7 +133,7 @@ commands include `INITIALIZE`, `START_AUDIO`, `SELECT_LOCAL`, `SELECT_BROADCAST`
 ## Codec Controller state
 
 Messages on this channel mirror the latest private operational and presentation state owned
-by the Codec Controller subsystem, including `OFF`, `INITIALIZING`, `READY`, `LOCAL_ONLY`,
+by the Codec Controller subsystem, including `OFF`, `INITIALIZING`, `LOCAL_ONLY`,
 `BROADCAST_ONLY`, and `ERROR`. The subsystem's private state remains authoritative.
 
 ### Subscribers and listeners
@@ -189,7 +209,9 @@ do not directly change another subsystem's state.
 
 Messages on this channel request behavior from the Audio Streaming subsystem. Initial
 commands include `ENABLE_RECEIVER`, `START_SCAN`, `STOP_SCAN`, `STOP`, `DISABLE_RECEIVER`,
-and `RESET`.
+and `RESET`. `STOP` is valid from any active enabled state and owns the required stop and
+cleanup before transitioning to `IDLE`. `DISABLE_RECEIVER` is valid from any enabled state
+and owns the required stop, synchronization cleanup, and transition to `DISABLED`.
 
 ### Subscribers and listeners
 

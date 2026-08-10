@@ -54,23 +54,9 @@ static void handle_state_disabled(const struct zbus_channel* channel)
   /*
    * Pseudocode:
    *
-   * if channel is not control_link_cmd_chan:
-   *   ignore the notification
-   *   return
-   *
-   * command = read control_link_cmd_chan
-   * if command is not ENABLE_CONTROL:
-   *   publish COMMAND_REJECTED on control_link_event_chan
-   *   return
-   *
-   * initialize the BLE control services
-   * start connectable advertising
-   *
-   * if both operations succeed:
-   *   set_state(ADVERTISING)
-   * else:
-   *   publish OPERATION_FAILED on control_link_event_chan
-   *   set_state(ERROR)
+   * the Control Link is outside the initial BIS/local-audio PoC
+   * keep the subsystem DISABLED
+   * log and ignore every notification; GATT control and advertising are deferred
    */
   ARG_UNUSED(channel);
 }
@@ -80,35 +66,8 @@ static void handle_state_advertising(const struct zbus_channel* channel)
   /*
    * Pseudocode:
    *
-   * if channel is bt_mgmt_chan:
-   *   event = read bt_mgmt_chan
-   *
-   *   if event is BLE_CONNECTED:
-   *     retain the connection used by the control interface
-   *     set_state(CONNECTED)
-   *     return
-   *
-   *   if event represents a fatal BLE failure:
-   *     set_state(ERROR)
-   *   return
-   *
-   * if channel is not control_link_cmd_chan:
-   *   ignore the notification
-   *   return
-   *
-   * command = read control_link_cmd_chan
-   * if command is DISABLE_CONTROL:
-   *   stop connectable advertising
-   *   disable the BLE control services
-   *
-   *   if both operations succeed:
-   *     set_state(DISABLED)
-   *   else:
-   *     publish OPERATION_FAILED on control_link_event_chan
-   *     set_state(ERROR)
-   *   return
-   *
-   * publish COMMAND_REJECTED on control_link_event_chan
+   * ADVERTISING is not entered by the initial PoC
+   * log the unexpected notification and leave the state unchanged
    */
   ARG_UNUSED(channel);
 }
@@ -118,43 +77,8 @@ static void handle_state_connected(const struct zbus_channel* channel)
   /*
    * Pseudocode:
    *
-   * if channel is bt_mgmt_chan:
-   *   event = read bt_mgmt_chan
-   *
-   *   if event is BLE_DISCONNECTED:
-   *     release the control connection
-   *     restart connectable advertising
-   *
-   *     if advertising starts successfully:
-   *       set_state(ADVERTISING)
-   *     else:
-   *       set_state(ERROR)
-   *     return
-   *
-   *   if event represents a fatal BLE failure:
-   *     set_state(ERROR)
-   *   return
-   *
-   * if channel is not control_link_cmd_chan:
-   *   ignore the notification
-   *   return
-   *
-   * command = read control_link_cmd_chan
-   * if command is DISABLE_CONTROL:
-   *   disconnect the control connection
-   *   disable connectable advertising and the BLE control services
-   *
-   *   if every operation succeeds:
-   *     set_state(DISABLED)
-   *   else:
-   *     publish OPERATION_FAILED on control_link_event_chan
-   *     set_state(ERROR)
-   *   return
-   *
-   * publish COMMAND_REJECTED on control_link_event_chan
-   *
-   * normalized GATT control requests are published to the Device Controller
-   * command channel without changing Control Link state
+   * CONNECTED is not entered by the initial PoC
+   * log the unexpected notification and leave the state unchanged
    */
   ARG_UNUSED(channel);
 }
@@ -164,23 +88,9 @@ static void handle_state_error(const struct zbus_channel* channel)
   /*
    * Pseudocode:
    *
-   * if channel is not control_link_cmd_chan:
-   *   retain BLE diagnostics
-   *   ignore the notification
-   *   return
-   *
-   * command = read control_link_cmd_chan
-   * if command is not RESET:
-   *   publish COMMAND_REJECTED on control_link_event_chan
-   *   return
-   *
-   * clean up the connection, advertising, and control services
-   * reset the Control Link resources
-   *
-   * if recovery succeeds:
-   *   set_state(DISABLED)
-   * else:
-   *   publish OPERATION_FAILED on control_link_event_chan
+   * retain BLE diagnostics
+   * log that Control Link recovery is outside the initial PoC
+   * ignore every notification; RESET is deferred
    */
   ARG_UNUSED(channel);
 }
