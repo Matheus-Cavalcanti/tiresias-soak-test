@@ -6,9 +6,11 @@
 
 #include "codec_controller.h"
 
+#include "hw_codec.h"
 #include "zbus_common.h"
 
 #include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
 #include <zephyr/zbus/zbus.h>
 
 #define CODEC_CONTROLLER_THREAD_STACK_SIZE 1024
@@ -17,9 +19,12 @@
 #define CODEC_CONTROLLER_OBSERVER_PRIORITY 0
 #define CODEC_CONTROLLER_ZBUS_TIMEOUT_MS 100
 
+LOG_MODULE_REGISTER(codec_controller, CONFIG_LOG_DEFAULT_LEVEL);
+
 ZBUS_SUBSCRIBER_DEFINE(codec_controller_sub, CODEC_CONTROLLER_SUBSCRIBER_QUEUE_SIZE);
 
 ZBUS_CHAN_DECLARE(audio_streaming_state_chan);
+ZBUS_CHAN_DECLARE(led_chan);
 
 ZBUS_CHAN_DEFINE(codec_controller_cmd_chan, codec_controller_cmd_chan_msg, NULL, NULL,
     ZBUS_OBSERVERS(codec_controller_sub), ZBUS_MSG_INIT(.cmd = CODEC_CONTROLLER_CMD_INITIALIZE));
@@ -35,7 +40,7 @@ ZBUS_CHAN_ADD_OBS(audio_streaming_state_chan, codec_controller_sub, CODEC_CONTRO
 
 static codec_controller_state current_state = CODEC_CONTROLLER_STATE_OFF;
 
-static int __maybe_unused set_state(codec_controller_state state)
+static int set_state(codec_controller_state state)
 {
   codec_controller_state_chan_msg msg = {
     .state = state,
@@ -45,134 +50,232 @@ static int __maybe_unused set_state(codec_controller_state state)
     return 0;
   }
 
+  LOG_INF("State transition: %d -> %d", current_state, state);
   current_state = state;
 
   return zbus_chan_pub(&codec_controller_state_chan, &msg, K_MSEC(CODEC_CONTROLLER_ZBUS_TIMEOUT_MS));
 }
 
+/* === Helper Functions === */
+
+static void enter_error(void)
+{
+  int ret = set_state(CODEC_CONTROLLER_STATE_ERROR);
+
+  if (ret != 0) {
+    LOG_ERR("Failed to publish ERROR state: %d", ret);
+  }
+}
+
+static int read_audio_streaming_state(audio_streaming_state* state)
+{
+  audio_streaming_state_chan_msg msg;
+  int ret = zbus_chan_read(&audio_streaming_state_chan, &msg, K_MSEC(CODEC_CONTROLLER_ZBUS_TIMEOUT_MS));
+
+  if (ret == 0) {
+    *state = msg.state;
+  }
+
+  return ret;
+}
+
+static void publish_led_command(led_cmd_t command)
+{
+  led_chan_msg_t msg = {
+    .led = LED_2,
+    .cmd = command,
+  };
+  int ret = zbus_chan_pub(&led_chan, &msg, K_MSEC(CODEC_CONTROLLER_ZBUS_TIMEOUT_MS));
+
+  if (ret != 0) {
+    LOG_ERR("Failed to publish codec indication: %d", ret);
+  }
+}
+
+static int select_local_mode(void)
+{
+  int ret = hw_codec_select_local();
+
+  if (ret != 0) {
+    return ret;
+  }
+
+  ret = set_state(CODEC_CONTROLLER_STATE_LOCAL_ONLY);
+  if (ret != 0) {
+    return ret;
+  }
+
+  publish_led_command(BLINK);
+
+  return 0;
+}
+
+static int select_broadcast_mode(void)
+{
+  int ret = hw_codec_select_i2s();
+
+  if (ret != 0) {
+    return ret;
+  }
+
+  ret = set_state(CODEC_CONTROLLER_STATE_BROADCAST_ONLY);
+  if (ret != 0) {
+    return ret;
+  }
+
+  publish_led_command(TURN_ON);
+
+  return 0;
+}
+
+/* === State Handlers === */
+
 static void handle_state_off(const struct zbus_channel* channel)
 {
-  /*
-   * Pseudocode:
-   *
-   * if channel is not codec_controller_cmd_chan:
-   *   ignore the notification
-   *   return
-   *
-   * command = read codec_controller_cmd_chan
-   * if command is not CODEC_CONTROLLER_CMD_INITIALIZE:
-   *   log that only CODEC_CONTROLLER_CMD_INITIALIZE is supported while OFF by the PoC
-   *   return
-   *
-   * set_state(INITIALIZING)
-   * result = codec_controller_actions_start_local()
-   *   this action resets, initializes, and starts the local audio path
-   *
-   * if result succeeds:
-   *   set_state(LOCAL_ONLY)
-   * else:
-   *   set_state(ERROR)
-   */
-  ARG_UNUSED(channel);
+  codec_controller_cmd_chan_msg msg;
+  int ret;
+
+  if (channel != &codec_controller_cmd_chan) {
+    return;
+  }
+
+  ret = zbus_chan_read(channel, &msg, K_MSEC(CODEC_CONTROLLER_ZBUS_TIMEOUT_MS));
+  if (ret != 0) {
+    LOG_ERR("Failed to read Codec Controller command: %d", ret);
+    enter_error();
+    return;
+  }
+
+  if (msg.cmd != CODEC_CONTROLLER_CMD_INITIALIZE) {
+    LOG_WRN("Command %d is not supported while OFF", msg.cmd);
+    return;
+  }
+
+  ret = set_state(CODEC_CONTROLLER_STATE_INITIALIZING);
+  if (ret != 0) {
+    LOG_ERR("Failed to publish INITIALIZING state: %d", ret);
+    enter_error();
+    return;
+  }
+
+  ret = hw_codec_init();
+  if (ret != 0) {
+    LOG_ERR("Failed to initialize the hardware codec: %d", ret);
+    enter_error();
+    return;
+  }
+
+  ret = select_local_mode();
+  if (ret != 0) {
+    LOG_ERR("Failed to select local audio after initialization: %d", ret);
+    enter_error();
+  }
 }
 
 static void handle_state_initializing(const struct zbus_channel* channel)
 {
-  /*
-   * Pseudocode:
-   *
-   * initialization runs synchronously in codec_controller_actions_start_local()
-   * ignore any unexpected notification while it is in progress
-   */
   ARG_UNUSED(channel);
+
+  LOG_WRN("Ignoring notification while codec initialization is in progress");
 }
 
 static void handle_state_local_only(const struct zbus_channel* channel)
 {
-  /*
-   * Pseudocode:
-   *
-   * if channel is audio_streaming_state_chan:
-   *   cache whether Audio Streaming is STREAMING
-   *   return
-   *
-   * if channel is not codec_controller_cmd_chan:
-   *   ignore the notification
-   *   return
-   *
-   * command = read codec_controller_cmd_chan
-   *
-   * if command is SELECT_BROADCAST:
-   *   read the latest audio_streaming_state_chan value
-   *   if Audio Streaming is not STREAMING:
-   *     log that broadcast audio is unavailable and remain LOCAL_ONLY
-   *     return
-   *
-   *   result = codec_controller_actions_select_broadcast()
-   *   if result succeeds:
-   *     set_state(BROADCAST_ONLY)
-   *   else:
-   *     set_state(ERROR)
-   *   return
-   *
-   * if command is SELECT_LOCAL:
-   *   local audio is already selected; do nothing
-   *   return
-   *
-   * log that every other command is deferred or invalid for the PoC
-   */
-  ARG_UNUSED(channel);
+  codec_controller_cmd_chan_msg msg;
+  audio_streaming_state streaming_state;
+  int ret;
+
+  if (channel != &codec_controller_cmd_chan) {
+    return;
+  }
+
+  ret = zbus_chan_read(channel, &msg, K_MSEC(CODEC_CONTROLLER_ZBUS_TIMEOUT_MS));
+  if (ret != 0) {
+    LOG_ERR("Failed to read Codec Controller command: %d", ret);
+    enter_error();
+    return;
+  }
+
+  if (msg.cmd != CODEC_CONTROLLER_CMD_SELECT_BROADCAST) {
+    LOG_WRN("Command %d is not supported while LOCAL_ONLY", msg.cmd);
+    return;
+  }
+
+  ret = read_audio_streaming_state(&streaming_state);
+  if (ret != 0) {
+    LOG_ERR("Failed to read Audio Streaming state: %d", ret);
+    enter_error();
+    return;
+  }
+
+  if (streaming_state != AUDIO_STREAMING_STATE_STREAMING) {
+    LOG_INF("Broadcast audio is not available");
+    return;
+  }
+
+  ret = select_broadcast_mode();
+  if (ret != 0) {
+    LOG_ERR("Failed to select broadcast audio: %d", ret);
+    enter_error();
+  }
 }
 
 static void handle_state_broadcast_only(const struct zbus_channel* channel)
 {
-  /*
-   * Pseudocode:
-   *
-   * if channel is audio_streaming_state_chan:
-   *   streaming_state = read audio_streaming_state_chan
-   *   if streaming_state is not STREAMING:
-   *     result = codec_controller_actions_select_local()
-   *     if result succeeds:
-   *       set_state(LOCAL_ONLY)
-   *     else:
-   *       set_state(ERROR)
-   *   return
-   *
-   * if channel is not codec_controller_cmd_chan:
-   *   ignore the notification
-   *   return
-   *
-   * command = read codec_controller_cmd_chan
-   *
-   * if command is SELECT_LOCAL:
-   *   result = codec_controller_actions_select_local()
-   *   if result succeeds:
-   *     set_state(LOCAL_ONLY)
-   *   else:
-   *     set_state(ERROR)
-   *   return
-   *
-   * if command is SELECT_BROADCAST:
-   *   broadcast audio is already selected; do nothing
-   *   return
-   *
-   * log that every other command is deferred or invalid for the PoC
-   */
-  ARG_UNUSED(channel);
+  codec_controller_cmd_chan_msg msg;
+  audio_streaming_state streaming_state;
+  int ret;
+
+  if (channel == &audio_streaming_state_chan) {
+    ret = read_audio_streaming_state(&streaming_state);
+    if (ret != 0) {
+      LOG_ERR("Failed to read Audio Streaming state: %d", ret);
+      enter_error();
+      return;
+    }
+
+    if (streaming_state == AUDIO_STREAMING_STATE_STREAMING) {
+      return;
+    }
+
+    LOG_INF("Audio streaming stopped; falling back to local audio");
+    ret = select_local_mode();
+    if (ret != 0) {
+      LOG_ERR("Failed to fall back to local audio: %d", ret);
+      enter_error();
+    }
+    return;
+  }
+
+  if (channel != &codec_controller_cmd_chan) {
+    return;
+  }
+
+  ret = zbus_chan_read(channel, &msg, K_MSEC(CODEC_CONTROLLER_ZBUS_TIMEOUT_MS));
+  if (ret != 0) {
+    LOG_ERR("Failed to read Codec Controller command: %d", ret);
+    enter_error();
+    return;
+  }
+
+  if (msg.cmd != CODEC_CONTROLLER_CMD_SELECT_LOCAL) {
+    LOG_WRN("Command %d is not supported while BROADCAST_ONLY", msg.cmd);
+    return;
+  }
+
+  ret = select_local_mode();
+  if (ret != 0) {
+    LOG_ERR("Failed to select local audio: %d", ret);
+    enter_error();
+  }
 }
 
 static void handle_state_error(const struct zbus_channel* channel)
 {
-  /*
-   * Pseudocode:
-   *
-   * retain codec diagnostics
-   * log that the PoC uses fail-stop behavior and requires a device reboot
-   * ignore every notification; RESET and recovery are deferred
-   */
   ARG_UNUSED(channel);
 }
+
+/* === State Machine === */
 
 static void codec_controller_state_machine(const struct zbus_channel* channel)
 {
@@ -192,8 +295,14 @@ static void codec_controller_state_machine(const struct zbus_channel* channel)
   case CODEC_CONTROLLER_STATE_ERROR:
     handle_state_error(channel);
     break;
+  default:
+    LOG_ERR("Unknown Codec Controller state: %d", current_state);
+    enter_error();
+    break;
   }
 }
+
+/* === Thread === */
 
 static void codec_controller_thread(void)
 {
