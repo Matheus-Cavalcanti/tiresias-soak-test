@@ -11,7 +11,6 @@
 #include <pcm_stream_channel_modifier.h>
 #include <tone.h>
 #include <zephyr/kernel.h>
-#include <zephyr/shell/shell.h>
 #include <zephyr/sys/atomic.h>
 
 #include "audio_datapath.h"
@@ -358,7 +357,7 @@ uint8_t stream_state_get(void)
   return atomic_get(&pipeline_running) != 0 ? STATE_STREAMING : STATE_PAUSED;
 }
 
-/**@brief Initializes the FIFOs, the codec, and starts the I2S
+/**@brief Initializes the FIFOs and software codec, then starts the audio data pipeline.
  */
 void audio_system_start(void)
 {
@@ -423,11 +422,11 @@ void audio_system_stop(void)
   atomic_clear(&pipeline_running);
 
   if (!sw_codec_cfg.initialized) {
-    LOG_WRN("Codec already unitialized");
+    LOG_WRN("Audio pipeline is already stopped");
     return;
   }
 
-  LOG_DBG("Stopping codec");
+  LOG_DBG("Stopping audio pipeline");
 
 #if ((CONFIG_AUDIO_DEV == GATEWAY) && CONFIG_AUDIO_SOURCE_USB)
   audio_usb_stop();
@@ -499,33 +498,3 @@ int audio_system_init(void)
 
   return 0;
 }
-
-static int cmd_audio_system_start(const struct shell* shell, size_t argc, const char** argv)
-{
-  ARG_UNUSED(argc);
-  ARG_UNUSED(argv);
-
-  audio_system_start();
-
-  shell_print(shell, "Audio system started");
-
-  return 0;
-}
-
-static int cmd_audio_system_stop(const struct shell* shell, size_t argc, const char** argv)
-{
-  ARG_UNUSED(argc);
-  ARG_UNUSED(argv);
-
-  audio_system_stop();
-
-  shell_print(shell, "Audio system stopped");
-
-  return 0;
-}
-
-SHELL_STATIC_SUBCMD_SET_CREATE(audio_system_cmd,
-    SHELL_COND_CMD(CONFIG_SHELL, start, NULL, "Start the audio system", cmd_audio_system_start),
-    SHELL_COND_CMD(CONFIG_SHELL, stop, NULL, "Stop the audio system", cmd_audio_system_stop), SHELL_SUBCMD_SET_END);
-
-SHELL_CMD_REGISTER(audio_system, &audio_system_cmd, "Audio system commands", NULL);

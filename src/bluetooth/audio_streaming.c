@@ -14,15 +14,14 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/zbus/zbus.h>
 
-#define AUDIO_STREAMING_THREAD_STACK_SIZE 1024
+#define AUDIO_STREAMING_THREAD_STACK_SIZE 4096
 #define AUDIO_STREAMING_THREAD_PRIORITY 3
-#define AUDIO_STREAMING_SUBSCRIBER_QUEUE_SIZE 8
 #define AUDIO_STREAMING_OBSERVER_PRIORITY 0
 #define AUDIO_STREAMING_ZBUS_TIMEOUT_MS 100
 
 LOG_MODULE_REGISTER(audio_streaming, CONFIG_LOG_DEFAULT_LEVEL);
 
-ZBUS_SUBSCRIBER_DEFINE(audio_streaming_sub, AUDIO_STREAMING_SUBSCRIBER_QUEUE_SIZE);
+ZBUS_MSG_SUBSCRIBER_DEFINE(audio_streaming_sub);
 
 ZBUS_CHAN_DECLARE(bt_mgmt_chan);
 ZBUS_CHAN_DECLARE(le_audio_chan);
@@ -41,6 +40,14 @@ ZBUS_CHAN_ADD_OBS(bt_mgmt_chan, audio_streaming_sub, AUDIO_STREAMING_OBSERVER_PR
 ZBUS_CHAN_ADD_OBS(le_audio_chan, audio_streaming_sub, AUDIO_STREAMING_OBSERVER_PRIORITY);
 
 static audio_streaming_state current_state = AUDIO_STREAMING_STATE_DISABLED;
+
+union audio_streaming_notification {
+  audio_streaming_cmd_chan_msg command;
+  struct bt_mgmt_msg bt_mgmt;
+  struct le_audio_msg le_audio;
+};
+
+static union audio_streaming_notification current_notification;
 
 static int set_state(audio_streaming_state state)
 {
@@ -74,24 +81,23 @@ static void enter_error(void)
 
 static int read_command(audio_streaming_cmd* command)
 {
-  audio_streaming_cmd_chan_msg msg;
-  int ret = zbus_chan_read(&audio_streaming_cmd_chan, &msg, K_MSEC(AUDIO_STREAMING_ZBUS_TIMEOUT_MS));
+  *command = current_notification.command.cmd;
 
-  if (ret == 0) {
-    *command = msg.cmd;
-  }
-
-  return ret;
+  return 0;
 }
 
 static int read_bt_mgmt_event(struct bt_mgmt_msg* msg)
 {
-  return zbus_chan_read(&bt_mgmt_chan, msg, K_MSEC(AUDIO_STREAMING_ZBUS_TIMEOUT_MS));
+  *msg = current_notification.bt_mgmt;
+
+  return 0;
 }
 
 static int read_le_audio_event(struct le_audio_msg* msg)
 {
-  return zbus_chan_read(&le_audio_chan, msg, K_MSEC(AUDIO_STREAMING_ZBUS_TIMEOUT_MS));
+  *msg = current_notification.le_audio;
+
+  return 0;
 }
 
 static void finish_scan_restart(int action_result)
@@ -519,12 +525,16 @@ static void audio_streaming_state_machine(const struct zbus_channel* channel)
   }
 }
 
-static void audio_streaming_thread(void)
+static void audio_streaming_thread(void* arg1, void* arg2, void* arg3)
 {
   const struct zbus_channel* channel;
 
+  ARG_UNUSED(arg1);
+  ARG_UNUSED(arg2);
+  ARG_UNUSED(arg3);
+
   while (1) {
-    if (zbus_sub_wait(&audio_streaming_sub, &channel, K_FOREVER) != 0) {
+    if (zbus_sub_wait_msg(&audio_streaming_sub, &channel, &current_notification, K_FOREVER) != 0) {
       continue;
     }
 
