@@ -1,8 +1,8 @@
-# Button Module
+# Button Input Subsystem
 
-The button module owns the board button GPIO setup and publishes button events
-to zbus. It is intentionally small: the current board has one physical button,
-so the module currently exposes one event, `BUTTON_1_PRESSED`.
+The Button Input subsystem owns the board button GPIO setup and publishes button
+events to Zbus. It is intentionally small: the current board has one physical
+button, so the subsystem currently exposes one event, `BUTTON_1_PRESSED`.
 
 ## Files
 
@@ -12,7 +12,8 @@ so the module currently exposes one event, `BUTTON_1_PRESSED`.
 
 ## Devicetree Requirements
 
-The module requires the `sw0` devicetree alias to have a `gpios` property.
+The Button Input subsystem requires the `sw0` devicetree alias to have a `gpios`
+property.
 
 At compile time, `button_handler.c` checks this with:
 
@@ -31,7 +32,7 @@ int button_handler_init(void);
 The init function configures each button GPIO as input, installs the GPIO
 callback, and enables the interrupt.
 
-The module also keeps a small polling helper:
+The subsystem also keeps a small polling helper:
 
 ```c
 int button_pressed(gpio_pin_t button_pin, bool *button_pressed);
@@ -42,7 +43,7 @@ handling should use zbus events.
 
 ## Zbus Contract
 
-The module defines and publishes `button_chan`:
+The Button Input subsystem defines and publishes `button_chan`:
 
 ```c
 ZBUS_CHAN_DEFINE(button_chan, btn_chan_msg_t, ...);
@@ -60,7 +61,7 @@ typedef struct btn_chan_msg_t {
 } btn_chan_msg_t;
 ```
 
-Consumers subscribe to `button_chan` and switch on `msg.event`.
+Subscriber subsystems consume `button_chan` and switch on `msg.event`.
 
 ## Runtime Flow
 
@@ -86,5 +87,5 @@ Example shape:
 },
 ```
 
-Keep the ISR generic. New behavior should usually be implemented by zbus
-consumers, not inside the button module.
+Keep the ISR generic. New behavior should usually be implemented by subscriber
+subsystems, not inside the Button Input subsystem.

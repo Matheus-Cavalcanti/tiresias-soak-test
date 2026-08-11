@@ -11,12 +11,12 @@
 #include <pcm_stream_channel_modifier.h>
 #include <tone.h>
 #include <zephyr/kernel.h>
-#include <zephyr/shell/shell.h>
+#include <zephyr/sys/atomic.h>
 
 #include "audio_datapath.h"
 #include "audio_i2s.h"
 #include "audio_usb.h"
-#include "hw_codec.h"
+// #include "hw_codec.h"
 #include "macros_common.h"
 #include "streamctrl.h"
 #include "sw_codec_select.h"
@@ -47,6 +47,7 @@ static struct k_poll_event encoder_evt
     = K_POLL_EVENT_INITIALIZER(K_POLL_TYPE_SIGNAL, K_POLL_MODE_NOTIFY_ONLY, &encoder_sig);
 
 static struct sw_codec_config sw_codec_cfg;
+static atomic_t pipeline_running = ATOMIC_INIT(0);
 /* Buffer which can hold max 1 period test tone at 1000 Hz */
 static int16_t test_tone_buf[CONFIG_AUDIO_SAMPLE_RATE_HZ / 1000];
 static size_t test_tone_size;
@@ -282,12 +283,12 @@ int audio_system_decode(void const* const encoded_data, size_t encoded_data_size
   static void* pcm_raw_data;
   size_t pcm_block_size;
 
-  if (!sw_codec_cfg.initialized) {
+  if (atomic_get(&pipeline_running) == 0) {
     /* Throw away data */
     /* This can happen when using play/pause since there might be
      * some packages left in the buffers
      */
-    LOG_DBG("Trying to decode while codec is not initialized");
+    LOG_DBG("Trying to decode while the audio pipeline is not running");
     return -EPERM;
   }
 
@@ -351,11 +352,18 @@ int audio_system_decode(void const* const encoded_data, size_t encoded_data_size
   return 0;
 }
 
-/**@brief Initializes the FIFOs, the codec, and starts the I2S
+uint8_t stream_state_get(void)
+{
+  return atomic_get(&pipeline_running) != 0 ? STATE_STREAMING : STATE_PAUSED;
+}
+
+/**@brief Initializes the FIFOs and software codec, then starts the audio data pipeline.
  */
 void audio_system_start(void)
 {
   int ret;
+
+  atomic_clear(&pipeline_running);
 
   if (CONFIG_AUDIO_DEV == HEADSET) {
     audio_headset_configure();
@@ -392,33 +400,40 @@ void audio_system_start(void)
   ret = audio_usb_start(&fifo_tx, &fifo_rx);
   ERR_CHK(ret);
 #else
-  ret = hw_codec_default_conf_enable();
-  ERR_CHK(ret);
+  /* Control of the hardware codec is the responsibility of the Codec Controller subsystem. */
+  // ret = hw_codec_default_conf_enable();
+  // ERR_CHK(ret);
 
   ret = audio_datapath_start(&fifo_rx);
   ERR_CHK(ret);
 
   k_msleep(I2S_STATUS_SETTLE_TIME_MS);
-  hw_codec_log_status_2();
+  /* Control of the hardware codec is the responsibility of the Codec Controller subsystem. */
+  // hw_codec_log_status_2();
 #endif /* ((CONFIG_AUDIO_SOURCE_USB) && (CONFIG_AUDIO_DEV == GATEWAY))) */
+
+  atomic_set(&pipeline_running, 1);
 }
 
 void audio_system_stop(void)
 {
   int ret;
 
+  atomic_clear(&pipeline_running);
+
   if (!sw_codec_cfg.initialized) {
-    LOG_WRN("Codec already unitialized");
+    LOG_WRN("Audio pipeline is already stopped");
     return;
   }
 
-  LOG_DBG("Stopping codec");
+  LOG_DBG("Stopping audio pipeline");
 
 #if ((CONFIG_AUDIO_DEV == GATEWAY) && CONFIG_AUDIO_SOURCE_USB)
   audio_usb_stop();
 #else
-  ret = hw_codec_soft_reset();
-  ERR_CHK(ret);
+  /* Control of the hardware codec is the responsibility of the Codec Controller subsystem. */
+  // ret = hw_codec_soft_reset();
+  // ERR_CHK(ret);
 
   ret = audio_datapath_stop();
   ERR_CHK(ret);
@@ -472,43 +487,14 @@ int audio_system_init(void)
     return ret;
   }
 
-  ret = hw_codec_init();
-  if (ret) {
-    LOG_ERR("Failed to initialize HW codec: %d", ret);
-    return ret;
-  }
+  /* Control of the hardware codec is the responsibility of the Codec Controller subsystem. */
+  // ret = hw_codec_init();
+  // if (ret) {
+  //   LOG_ERR("Failed to initialize HW codec: %d", ret);
+  //   return ret;
+  // }
 #endif
   k_poll_signal_init(&encoder_sig);
 
   return 0;
 }
-
-static int cmd_audio_system_start(const struct shell* shell, size_t argc, const char** argv)
-{
-  ARG_UNUSED(argc);
-  ARG_UNUSED(argv);
-
-  audio_system_start();
-
-  shell_print(shell, "Audio system started");
-
-  return 0;
-}
-
-static int cmd_audio_system_stop(const struct shell* shell, size_t argc, const char** argv)
-{
-  ARG_UNUSED(argc);
-  ARG_UNUSED(argv);
-
-  audio_system_stop();
-
-  shell_print(shell, "Audio system stopped");
-
-  return 0;
-}
-
-SHELL_STATIC_SUBCMD_SET_CREATE(audio_system_cmd,
-    SHELL_COND_CMD(CONFIG_SHELL, start, NULL, "Start the audio system", cmd_audio_system_start),
-    SHELL_COND_CMD(CONFIG_SHELL, stop, NULL, "Stop the audio system", cmd_audio_system_stop), SHELL_SUBCMD_SET_END);
-
-SHELL_CMD_REGISTER(audio_system, &audio_system_cmd, "Audio system commands", NULL);

@@ -1,0 +1,134 @@
+/*
+ * Copyright (c) 2026 Tiresias Firmware Team
+ *
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+ */
+
+#include "control_link.h"
+
+#include "zbus_common.h"
+
+#include <zephyr/kernel.h>
+#include <zephyr/zbus/zbus.h>
+
+#define CONTROL_LINK_THREAD_STACK_SIZE 1024
+#define CONTROL_LINK_THREAD_PRIORITY 3
+#define CONTROL_LINK_SUBSCRIBER_QUEUE_SIZE 8
+#define CONTROL_LINK_OBSERVER_PRIORITY 0
+#define CONTROL_LINK_ZBUS_TIMEOUT_MS 100
+
+ZBUS_SUBSCRIBER_DEFINE(control_link_sub, CONTROL_LINK_SUBSCRIBER_QUEUE_SIZE);
+
+ZBUS_CHAN_DECLARE(bt_mgmt_chan);
+
+ZBUS_CHAN_DEFINE(control_link_cmd_chan, control_link_cmd_chan_msg, NULL, NULL, ZBUS_OBSERVERS(control_link_sub),
+    ZBUS_MSG_INIT(.cmd = CONTROL_LINK_CMD_ENABLE_CONTROL));
+
+ZBUS_CHAN_DEFINE(control_link_state_chan, control_link_state_chan_msg, NULL, NULL, ZBUS_OBSERVERS_EMPTY,
+    ZBUS_MSG_INIT(.state = CONTROL_LINK_STATE_DISABLED));
+
+ZBUS_CHAN_DEFINE(control_link_event_chan, control_link_event_chan_msg, NULL, NULL, ZBUS_OBSERVERS_EMPTY,
+    ZBUS_MSG_INIT(.cmd = CONTROL_LINK_CMD_ENABLE_CONTROL, .result = CONTROL_LINK_RESULT_COMMAND_REJECTED, .error = 0));
+
+ZBUS_CHAN_ADD_OBS(bt_mgmt_chan, control_link_sub, CONTROL_LINK_OBSERVER_PRIORITY);
+
+static control_link_state current_state = CONTROL_LINK_STATE_DISABLED;
+
+static int __maybe_unused set_state(control_link_state state)
+{
+  control_link_state_chan_msg msg = {
+    .state = state,
+  };
+
+  if (current_state == state) {
+    return 0;
+  }
+
+  current_state = state;
+
+  return zbus_chan_pub(&control_link_state_chan, &msg, K_MSEC(CONTROL_LINK_ZBUS_TIMEOUT_MS));
+}
+
+static void handle_state_disabled(const struct zbus_channel* channel)
+{
+  /*
+   * Pseudocode:
+   *
+   * the Control Link is outside the initial BIS/local-audio PoC
+   * keep the subsystem DISABLED
+   * log and ignore every notification; GATT control and advertising are deferred
+   */
+  ARG_UNUSED(channel);
+}
+
+static void handle_state_advertising(const struct zbus_channel* channel)
+{
+  /*
+   * Pseudocode:
+   *
+   * ADVERTISING is not entered by the initial PoC
+   * log the unexpected notification and leave the state unchanged
+   */
+  ARG_UNUSED(channel);
+}
+
+static void handle_state_connected(const struct zbus_channel* channel)
+{
+  /*
+   * Pseudocode:
+   *
+   * CONNECTED is not entered by the initial PoC
+   * log the unexpected notification and leave the state unchanged
+   */
+  ARG_UNUSED(channel);
+}
+
+static void handle_state_error(const struct zbus_channel* channel)
+{
+  /*
+   * Pseudocode:
+   *
+   * retain BLE diagnostics
+   * log that Control Link recovery is outside the initial PoC
+   * ignore every notification; RESET is deferred
+   */
+  ARG_UNUSED(channel);
+}
+
+static void control_link_state_machine(const struct zbus_channel* channel)
+{
+  switch (current_state) {
+  case CONTROL_LINK_STATE_DISABLED:
+    handle_state_disabled(channel);
+    break;
+  case CONTROL_LINK_STATE_ADVERTISING:
+    handle_state_advertising(channel);
+    break;
+  case CONTROL_LINK_STATE_CONNECTED:
+    handle_state_connected(channel);
+    break;
+  case CONTROL_LINK_STATE_ERROR:
+    handle_state_error(channel);
+    break;
+  }
+}
+
+static void control_link_thread(void* arg1, void* arg2, void* arg3)
+{
+  const struct zbus_channel* channel;
+
+  ARG_UNUSED(arg1);
+  ARG_UNUSED(arg2);
+  ARG_UNUSED(arg3);
+
+  while (1) {
+    if (zbus_sub_wait(&control_link_sub, &channel, K_FOREVER) != 0) {
+      continue;
+    }
+
+    control_link_state_machine(channel);
+  }
+}
+
+K_THREAD_DEFINE(control_link_thread_id, CONTROL_LINK_THREAD_STACK_SIZE, control_link_thread, NULL, NULL, NULL,
+    CONTROL_LINK_THREAD_PRIORITY, 0, 0);

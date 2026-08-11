@@ -94,6 +94,20 @@ int hw_codec_soft_reset(void);
 int hw_codec_init(void);
 
 /**
+ * @brief Select the local microphone and DSP listening path.
+ *
+ * @return 0 if successful, error otherwise
+ */
+int hw_codec_select_local(void);
+
+/**
+ * @brief Select the I2S listening path.
+ *
+ * @return 0 if successful, error otherwise
+ */
+int hw_codec_select_i2s(void);
+
+/**
  * @brief Read and log the HW codec STATUS2 register.
  */
 void hw_codec_log_status_2(void);

@@ -32,7 +32,7 @@ Use the pristine option supported by the chosen build path:
 ### Why a Pristine Build Is Required
 
 The firmware compiles generated parameter addresses into application objects
-such as `audio_control.c`. It separately compiles the generated SigmaDSP program
+such as `hw_codec.c`. It separately compiles the generated SigmaDSP program
 and initial parameter data into `adau1787.c`.
 
 An incomplete incremental rebuild can therefore produce a valid firmware image

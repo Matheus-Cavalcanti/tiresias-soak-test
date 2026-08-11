@@ -24,24 +24,141 @@ typedef struct btn_chan_msg_t {
 	enum btn_event_t event;
 } btn_chan_msg_t;
 
-/* === Controller === */
-typedef enum controller_event {
-	CONTROLLER_EVENT_INIT,
-} controller_event;
+/* === Device Controller subsystem === */
+typedef enum device_controller_cmd {
+  DEVICE_CONTROLLER_CMD_START,
+  DEVICE_CONTROLLER_CMD_LOW_POWER,
+  DEVICE_CONTROLLER_CMD_WAKE,
+  DEVICE_CONTROLLER_CMD_POWER_OFF,
+  DEVICE_CONTROLLER_CMD_RECOVER,
+} device_controller_cmd;
 
-typedef struct controller_event_chan_msg {
-	enum controller_event event;
-} controller_event_chan_msg;
+typedef struct device_controller_cmd_chan_msg {
+  enum device_controller_cmd cmd;
+} device_controller_cmd_chan_msg;
 
-typedef enum controller_state {
-	CONTROLLER_STATE_OFF,
-	CONTROLLER_STATE_INITIALIZING,
-	CONTROLLER_STATE_STANDARD,
-	CONTROLLER_STATE_BROADCAST_STREAMING,
-	CONTROLLER_STATE_ERROR,
-} controller_state;
+typedef enum device_controller_state {
+  DEVICE_CONTROLLER_STATE_OFF,
+  DEVICE_CONTROLLER_STATE_INITIALIZING,
+  DEVICE_CONTROLLER_STATE_OPERATIONAL,
+  DEVICE_CONTROLLER_STATE_LOW_POWER,
+  DEVICE_CONTROLLER_STATE_FAULT,
+} device_controller_state;
 
-/* === Bluetooth service === */
+typedef struct device_controller_state_chan_msg {
+  enum device_controller_state state;
+} device_controller_state_chan_msg;
+
+/* === Codec Controller subsystem === */
+typedef enum codec_controller_cmd {
+  CODEC_CONTROLLER_CMD_INITIALIZE,
+  CODEC_CONTROLLER_CMD_SELECT_LOCAL,
+  CODEC_CONTROLLER_CMD_SELECT_BROADCAST,
+  CODEC_CONTROLLER_CMD_POWER_DOWN,
+  CODEC_CONTROLLER_CMD_RESET,
+} codec_controller_cmd;
+
+typedef struct codec_controller_cmd_chan_msg {
+  enum codec_controller_cmd cmd;
+} codec_controller_cmd_chan_msg;
+
+typedef enum codec_controller_state {
+  CODEC_CONTROLLER_STATE_OFF,
+  CODEC_CONTROLLER_STATE_INITIALIZING,
+  CODEC_CONTROLLER_STATE_LOCAL_ONLY,
+  CODEC_CONTROLLER_STATE_BROADCAST_ONLY,
+  CODEC_CONTROLLER_STATE_ERROR,
+} codec_controller_state;
+
+typedef struct codec_controller_state_chan_msg {
+  enum codec_controller_state state;
+} codec_controller_state_chan_msg;
+
+typedef enum codec_controller_result {
+  CODEC_CONTROLLER_RESULT_COMMAND_REJECTED,
+  CODEC_CONTROLLER_RESULT_OPERATION_FAILED,
+} codec_controller_result;
+
+typedef struct codec_controller_result_chan_msg {
+  enum codec_controller_cmd cmd;
+  enum codec_controller_result result;
+  int error;
+} codec_controller_result_chan_msg;
+
+/* === Control Link subsystem === */
+typedef enum control_link_cmd {
+  CONTROL_LINK_CMD_ENABLE_CONTROL,
+  CONTROL_LINK_CMD_DISABLE_CONTROL,
+  CONTROL_LINK_CMD_RESET,
+} control_link_cmd;
+
+typedef struct control_link_cmd_chan_msg {
+  enum control_link_cmd cmd;
+} control_link_cmd_chan_msg;
+
+typedef enum control_link_state {
+  CONTROL_LINK_STATE_DISABLED,
+  CONTROL_LINK_STATE_ADVERTISING,
+  CONTROL_LINK_STATE_CONNECTED,
+  CONTROL_LINK_STATE_ERROR,
+} control_link_state;
+
+typedef struct control_link_state_chan_msg {
+  enum control_link_state state;
+} control_link_state_chan_msg;
+
+typedef enum control_link_result {
+  CONTROL_LINK_RESULT_COMMAND_REJECTED,
+  CONTROL_LINK_RESULT_OPERATION_FAILED,
+} control_link_result;
+
+typedef struct control_link_event_chan_msg {
+  enum control_link_cmd cmd;
+  enum control_link_result result;
+  int error;
+} control_link_event_chan_msg;
+
+/* === Audio Streaming subsystem === */
+typedef enum audio_streaming_cmd {
+  AUDIO_STREAMING_CMD_ENABLE_RECEIVER,
+  AUDIO_STREAMING_CMD_START_SCAN,
+  AUDIO_STREAMING_CMD_STOP_SCAN,
+  AUDIO_STREAMING_CMD_STOP,
+  AUDIO_STREAMING_CMD_DISABLE_RECEIVER,
+  AUDIO_STREAMING_CMD_RESET,
+} audio_streaming_cmd;
+
+typedef struct audio_streaming_cmd_chan_msg {
+  enum audio_streaming_cmd cmd;
+} audio_streaming_cmd_chan_msg;
+
+typedef enum audio_streaming_state {
+  AUDIO_STREAMING_STATE_DISABLED,
+  AUDIO_STREAMING_STATE_IDLE,
+  AUDIO_STREAMING_STATE_SCANNING,
+  AUDIO_STREAMING_STATE_PA_SYNCED,
+  AUDIO_STREAMING_STATE_BIS_SYNCING,
+  AUDIO_STREAMING_STATE_STREAMING,
+  AUDIO_STREAMING_STATE_RECOVERING,
+  AUDIO_STREAMING_STATE_ERROR,
+} audio_streaming_state;
+
+typedef struct audio_streaming_state_chan_msg {
+  enum audio_streaming_state state;
+} audio_streaming_state_chan_msg;
+
+typedef enum audio_streaming_result {
+  AUDIO_STREAMING_RESULT_COMMAND_REJECTED,
+  AUDIO_STREAMING_RESULT_OPERATION_FAILED,
+} audio_streaming_result;
+
+typedef struct audio_streaming_result_chan_msg {
+  enum audio_streaming_cmd cmd;
+  enum audio_streaming_result result;
+  int error;
+} audio_streaming_result_chan_msg;
+
+/* === Legacy Bluetooth service (excluded from the application target) === */
 typedef enum bt_cmd {
 	BT_CMD_INIT,
 } bt_cmd;
@@ -61,7 +178,7 @@ typedef struct bt_state_chan_msg {
 	enum bt_state state;
 } bt_state_chan_msg;
 
-/* === Audio control service === */
+/* === Legacy audio control service (excluded from the application target) === */
 typedef enum audio_cmd {
 	AUDIO_CMD_INIT,
 	AUDIO_CMD_CODEC_SWITCH,

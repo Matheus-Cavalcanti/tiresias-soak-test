@@ -80,7 +80,7 @@ int audio_system_config_set(uint32_t encoder_sample_rate_hz, uint32_t encoder_bi
 int audio_system_decode(void const* const encoded_data, size_t encoded_data_size, bool bad_frame);
 
 /**
- * @brief	Initialize and start both HW and SW audio codec.
+ * @brief	Initialize the software codec and start the audio data pipeline.
  */
 void audio_system_start(void);
 

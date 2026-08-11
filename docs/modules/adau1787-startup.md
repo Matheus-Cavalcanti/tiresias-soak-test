@@ -5,8 +5,8 @@ repository. It follows the path from application boot to live PCM traffic and
 separates two operations that happen at different times:
 
 1. **Codec initialization** resets, releases, and programs the ADAU1787.
-2. **Audio stream startup** starts the nRF5340 I2S peripheral and then reports
-   the codec's lock and power status.
+2. **Audio stream startup** configures the software pipeline and starts the
+   nRF5340 I2S peripheral when BIS audio begins.
 
 The codec is therefore programmed before BCLK and LRCK begin toggling.
 
@@ -15,9 +15,10 @@ The codec is therefore programmed before BCLK and LRCK begin toggling.
 | Responsibility | Source |
 | --- | --- |
 | Application entry point | `src/main.c` |
-| Top-level initialization command | `src/application/controller.c` |
-| Audio state machine | `src/audio/audio_control.c` |
-| Audio subsystem initialization and stream startup | `src/audio/audio_system.c` |
+| Device Controller subsystem implementation | `src/application/device_controller.c` |
+| Codec Controller subsystem implementation | `src/audio/codec_controller.c` |
+| Audio Streaming subsystem implementation | `src/bluetooth/audio_streaming.c` and `src/bluetooth/audio_streaming_actions.c` |
+| Audio-system initialization and stream startup | `src/audio/audio_system.c` |
 | Hardware-codec abstraction | `src/modules/hw_codec.c` |
 | ADAU1787 GPIO, I2C, programming, and status driver | `src/drivers/adau1787.c` and `src/drivers/adau1787.h` |
 | SigmaStudio-to-driver adaptation macros | `src/drivers/SigmaStudioFW.h` |
@@ -36,45 +37,50 @@ because the driver uses `DT_NODELABEL(adau_1787)`.
 ```mermaid
 sequenceDiagram
     participant Main as main()
-    participant Controller as Controller thread
-    participant Audio as Audio control thread
+    participant Controller as Device Controller
+    participant CodecCtrl as Codec Controller
+    participant Streaming as Audio Streaming
     participant System as Audio system
     participant I2S as nRF I2S
     participant Driver as ADAU1787 driver
     participant Codec as ADAU1787
 
-    Main->>Controller: controller_init()
-    Controller->>Audio: publish AUDIO_CMD_INIT
-    Audio->>System: audio_system_init()
+    Main->>Controller: device_controller_run()
+    Controller->>CodecCtrl: INITIALIZE
+    Controller->>Streaming: START_SCAN
+    CodecCtrl->>Driver: hw_codec_init() / adau1787_init()
+    Streaming->>System: audio_system_init()
     System->>I2S: audio_datapath_init()
     I2S->>I2S: start 12.288 MHz ACLK and configure I2S
     Note right of I2S: Peripheral is idle and no PCM frames are running yet
-    System->>Driver: hw_codec_init() / adau1787_init()
     Driver->>Codec: assert !PD and drive MP3 through MP6 inactive
     Driver->>Driver: configure I2C Fast Plus
     Driver->>Codec: release !PD
     Driver->>Driver: sleep 100 ms
     Driver->>Codec: Sigma download (208 writes + one delay request)
     Driver->>Codec: FastDSP stop/start (2 writes)
-    Audio->>Audio: enter AUDIO_STATE_STANDARD
+    CodecCtrl->>CodecCtrl: enter LOCAL_ONLY
 
-    Note over Audio,Codec: Later, after LE_AUDIO_EVT_STREAMING
-    Audio->>System: audio_system_start()
+    Note over Streaming,Codec: Later, after LE_AUDIO_EVT_STREAMING
+    Streaming->>System: audio_system_start()
     System->>I2S: start double-buffered I2S transfer
-    System->>System: sleep 10 ms
-    System->>Driver: read and log STATUS2
+    Streaming->>Streaming: enter STREAMING
 ```
 
-The controller and audio-control threads are statically created by Zephyr.
-`main()` does not call the codec driver directly. Instead, `controller_init()`
-notifies the controller zbus channel. The controller enters
-`CONTROLLER_STATE_INITIALIZING` and publishes `AUDIO_CMD_INIT`. The audio-control
-thread consumes that command, enters `AUDIO_STATE_INITIALIZING`, and calls
-`audio_system_init()`.
+The Device Controller subsystem runs its subscriber loop on the main thread. It publishes
+separate initialization commands to the statically created Codec Controller and Audio
+Streaming threads. The Codec Controller owns `hw_codec_init()` and ADAU1787 mode control;
+the Audio Streaming subsystem owns `audio_system_init()` and the Bluetooth-to-I2S pipeline
+lifecycle.
 
-For the current headset configuration (`CONFIG_AUDIO_DEV=1`),
-`audio_system_init()` follows the I2S/hardware-codec branch. The USB bypass is
-only selected for a gateway built with `CONFIG_AUDIO_SOURCE_USB`.
+The `CODEC_CONTROLLER_STATE_*` values describe private state owned by the Codec Controller
+subsystem. Its Zbus state channel mirrors that state for other subsystems and is not the
+authoritative state store.
+
+For the current headset configuration (`CONFIG_AUDIO_DEV=1`), `audio_system_init()` follows
+the I2S audio-datapath branch. Hardware-codec initialization is deliberately absent from
+that module because it belongs to the Codec Controller. The USB bypass is only selected
+for a gateway built with `CONFIG_AUDIO_SOURCE_USB`.
 
 ## Compile-Time Hardware Description
 
@@ -98,8 +104,8 @@ The base board definition places the ADAU1787 on `i2c1`:
 
 `adau1787_config_i2c()` looks up `I2C_1`, requests
 `I2C_SPEED_FAST_PLUS`, and then verifies that the bus in the codec's
-`i2c_dt_spec` is ready. The return value from `i2c_configure()` is currently not
-checked; only binding and readiness failures are handled.
+`i2c_dt_spec` is ready. A failed `i2c_configure()` call is logged and returned
+before codec programming begins.
 
 The generated SigmaStudio headers contain `DEVICE_ADDR_* = 0x50`, but that
 value does **not** choose the target on this platform. `SigmaStudioFW.h` accepts
@@ -216,15 +222,13 @@ re-exported.
 ### Generated delay behavior
 
 The generated sequence places `SIGMA_WRITE_DELAY` immediately after the first
-`CHIP_PWR = 0x17` write. Its data array is `{0x00, 0x23}`. In the current
-adapter, `SIGMA_WRITE_DELAY` calls `k_msleep(*(pData))`, so it consumes only the
-first byte and requests a **0 ms sleep**. The array could be read as the
-big-endian value `0x0023` (35), but the implementation does not combine its
-bytes. Consequently, the only effective pre-download wait guaranteed by the
-driver is the earlier 100 ms sleep after releasing `!PD`.
+`CHIP_PWR = 0x17` write. Its data array is `{0x00, 0x23}`. The adapter decodes
+this two-byte field as a big-endian unsigned value with `sys_get_be16()` and
+therefore sleeps for **35 ms**. A compile-time assertion requires generated
+delay fields to remain two bytes wide.
 
-This detail matters when comparing a SigmaStudio capture to firmware traffic:
-the generated delay entry does not produce a 35 ms gap in the current code.
+This 35 ms generated delay is separate from the driver's earlier 100 ms wait
+after releasing `!PD`.
 
 ## Stage 5: Start the FastDSP
 
@@ -276,25 +280,26 @@ if execution reaches its final `Audio codec initialization done.` log; its
 setup failures are fatal rather than ordinary recoverable returns in the
 current call path.
 
-## Stage 6: Start Live I2S and Check Status
+## Stage 6: Start Live I2S
 
-Successful programming moves the audio state to `AUDIO_STATE_STANDARD`, but it
-does not start PCM traffic. The codec stays powered and programmed while the
-application waits for LE Audio.
+Successful programming moves the Codec Controller to `LOCAL_ONLY`, but it does not start
+PCM traffic. The codec stays powered and programmed while the Audio Streaming subsystem
+discovers and synchronizes to a broadcast source.
 
-When the audio-control thread receives `LE_AUDIO_EVT_STREAMING`, it calls
+When the Audio Streaming subsystem receives `LE_AUDIO_EVT_STREAMING`, it calls
 `audio_system_start()`:
 
 1. Select the headset software-codec configuration.
 2. Initialize the transmit and receive FIFOs if needed.
 3. Initialize the LC3 software codec and its worker thread if required.
-4. Call `hw_codec_default_conf_enable()`. This is currently a no-op returning
-   zero; all meaningful ADAU1787 configuration came from the Sigma download.
-5. Start the double-buffered I2S transfer through `audio_datapath_start()`.
+4. Start the double-buffered I2S transfer through `audio_datapath_start()`.
    This is the point at which `nrfx_i2s_start()` enables continuous audio
    frames.
-6. Sleep 10 ms to let I2S/codec status settle.
-7. Read and log `STATUS2` at `0xC0AB`.
+5. Sleep 10 ms to let the I2S path settle, then mark the pipeline as running.
+
+Calls to `hw_codec_default_conf_enable()` and `hw_codec_log_status_2()` remain commented out
+in `audio_system.c` because hardware-codec control belongs to the Codec Controller. The
+status helper is still available for a future Codec Controller diagnostic action.
 
 `adau1787_log_status_2()` reports the raw status byte and decodes all eight
 bits:
@@ -310,46 +315,31 @@ bits:
 | 1 | `AVDD_UVW` | AVDD undervoltage was detected |
 | 0 | `PLL_LOCK` | PLL is locked |
 
-This read is diagnostic only. Startup does not poll these fields, wait for a
-particular combination, retry initialization, or change state when a lock bit
-is clear. A STATUS2 read error is logged but is not returned to
-`audio_system_start()`.
+Any future status read is diagnostic only. Startup does not currently read or poll these
+fields, wait for a particular combination, retry initialization, or change state when a
+lock bit is clear.
 
 ## Stop and Restart Behavior
 
-`audio_system_stop()` calls `hw_codec_soft_reset()` before stopping I2S, but
-that hardware-codec function is currently a no-op. It also does not call the
-implemented `adau1787_power_down()` helper. As a result:
+`audio_system_stop()` stops the data pipeline without calling
+`hw_codec_soft_reset()` or `adau1787_power_down()`. As a result:
 
 - stopping a stream leaves the ADAU1787 released from `!PD`, powered, and
   programmed;
-- a later `LE_AUDIO_EVT_STREAMING` restarts I2S and logs STATUS2 again without
-  downloading the SigmaStudio images again; and
-- the full reset/programming sequence normally runs only once, during audio
-  subsystem initialization after application boot.
+- a later `LE_AUDIO_EVT_STREAMING` restarts I2S without downloading the
+  SigmaStudio images again; and
+- the full reset/programming sequence normally runs only once, during Codec
+  Controller subsystem initialization after application boot.
 
 ## Expected Logs and Troubleshooting Order
 
-A normal boot contains these codec-specific milestones, with other controller,
-Bluetooth, and audio logs interleaved because initialization is thread-driven:
+A normal boot contains these codec-specific milestones, with logs from the Device
+Controller, Control Link, and Audio Streaming subsystems and the audio modules
+interleaved because initialization is thread-driven:
 
 ```text
 Initializing audio codec...
 Audio codec initialization done.
-```
-
-After streaming begins, the firmware logs:
-
-```text
-ADAU1787 STATUS2=0x..
-POWER_UP_COMPLETE = ...
-SYNC_LOCK = ...
-SPT1_LOCK = ...
-SPT0_LOCK = ...
-ASRCO_LOCK = ...
-ASRCI_LOCK = ...
-AVDD_UVW = ...
-PLL_LOCK = ...
 ```
 
 When startup fails, check in this order:
@@ -360,10 +350,10 @@ When startup fails, check in this order:
 2. **GPIO readiness and polarity:** `!PD` must first go physically low and then
    high; MP3 through MP6 remain low during initialization.
 3. **I2C bus setup:** verify `I2C_1`, P1.2/P1.3, and that Fast Plus mode was
-   accepted. The current code does not report `i2c_configure()` failure.
+   accepted. An `i2c_configure()` failure is logged and returned.
 4. **First transfer timing:** the first I2C transaction occurs 100 ms after
-   `!PD` release. Do not expect the generated `{0x00, 0x23}` delay entry to add
-   35 ms.
+   `!PD` release. The generated `{0x00, 0x23}` delay adds 35 ms after the first
+   `CHIP_PWR = 0x17` write.
 5. **Programming error logs:** an `I2C write failed` message identifies the
    target address and only the high byte of the internal register address in
    its current log formatting. Any such failure is latched until the final
@@ -371,9 +361,9 @@ When startup fails, check in this order:
 6. **Clock timing:** codec programming happens before I2S frames start. BCLK and
    LRCK should appear only after the LE Audio streaming event; MCK pinctrl and
    HFCLKAUDIO are prepared earlier.
-7. **STATUS2 timing:** the status read occurs 10 ms after I2S starts. Treat the
-   lock lines as diagnostics, not as evidence that initialization gated on
-   them.
+7. **Codec status:** automatic STATUS2 logging is currently disabled. If it is
+   reintroduced as a Codec Controller diagnostic action, treat the lock lines
+   as diagnostics rather than startup gates.
 
 ## Maintaining the Startup Sequence
 
@@ -389,8 +379,8 @@ Persistent platform behavior belongs in the handwritten layers:
 - change reset timing, error handling, or explicit probes in
   `src/drivers/adau1787.c`;
 - change SigmaStudio macro adaptation in `src/drivers/SigmaStudioFW.h`; and
-- change codec-versus-stream lifecycle ordering in `audio_system.c` or the
-  audio-control state machine.
+- change codec-versus-stream lifecycle ordering in `audio_system.c` or the Codec
+  Controller subsystem's state machine.
 
 If the download is regenerated, recheck the operation counts, image sizes and
 addresses, stop/start register values, and delay encoding quoted in this
