@@ -82,7 +82,7 @@ static void handle_state_initializing(const struct zbus_channel* channel)
    * Pseudocode:
    *
    * initialization runs synchronously in codec_controller_actions_start_local()
-   * log and ignore any unexpected notification while it is in progress
+   * ignore any unexpected notification while it is in progress
    */
   ARG_UNUSED(channel);
 }
