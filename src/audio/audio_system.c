@@ -16,7 +16,7 @@
 #include "audio_datapath.h"
 #include "audio_i2s.h"
 #include "audio_usb.h"
-#include "hw_codec.h"
+// #include "hw_codec.h"
 #include "macros_common.h"
 #include "streamctrl.h"
 #include "sw_codec_select.h"
@@ -392,14 +392,16 @@ void audio_system_start(void)
   ret = audio_usb_start(&fifo_tx, &fifo_rx);
   ERR_CHK(ret);
 #else
-  ret = hw_codec_default_conf_enable();
-  ERR_CHK(ret);
+  /* Control of the hardware codec is the responsibility of the Codec Controller subsystem. */
+  // ret = hw_codec_default_conf_enable();
+  // ERR_CHK(ret);
 
   ret = audio_datapath_start(&fifo_rx);
   ERR_CHK(ret);
 
   k_msleep(I2S_STATUS_SETTLE_TIME_MS);
-  hw_codec_log_status_2();
+  /* Control of the hardware codec is the responsibility of the Codec Controller subsystem. */
+  // hw_codec_log_status_2();
 #endif /* ((CONFIG_AUDIO_SOURCE_USB) && (CONFIG_AUDIO_DEV == GATEWAY))) */
 }
 
@@ -417,8 +419,9 @@ void audio_system_stop(void)
 #if ((CONFIG_AUDIO_DEV == GATEWAY) && CONFIG_AUDIO_SOURCE_USB)
   audio_usb_stop();
 #else
-  ret = hw_codec_soft_reset();
-  ERR_CHK(ret);
+  /* Control of the hardware codec is the responsibility of the Codec Controller subsystem. */
+  // ret = hw_codec_soft_reset();
+  // ERR_CHK(ret);
 
   ret = audio_datapath_stop();
   ERR_CHK(ret);
@@ -472,11 +475,12 @@ int audio_system_init(void)
     return ret;
   }
 
-  ret = hw_codec_init();
-  if (ret) {
-    LOG_ERR("Failed to initialize HW codec: %d", ret);
-    return ret;
-  }
+  /* Control of the hardware codec is the responsibility of the Codec Controller subsystem. */
+  // ret = hw_codec_init();
+  // if (ret) {
+  //   LOG_ERR("Failed to initialize HW codec: %d", ret);
+  //   return ret;
+  // }
 #endif
   k_poll_signal_init(&encoder_sig);
 
