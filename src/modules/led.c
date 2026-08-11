@@ -104,11 +104,15 @@ static int handle_led_msg(led_chan_msg_t msg)
   return ret;
 }
 
-static void led_thread(void)
+static void led_thread(void* arg1, void* arg2, void* arg3)
 {
   const struct zbus_channel* chan;
   led_chan_msg_t msg;
   int ret;
+
+  ARG_UNUSED(arg1);
+  ARG_UNUSED(arg2);
+  ARG_UNUSED(arg3);
 
   while (1) {
     ret = zbus_sub_wait(&led_sub, &chan, K_FOREVER);

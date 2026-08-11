@@ -113,9 +113,13 @@ static void control_link_state_machine(const struct zbus_channel* channel)
   }
 }
 
-static void control_link_thread(void)
+static void control_link_thread(void* arg1, void* arg2, void* arg3)
 {
   const struct zbus_channel* channel;
+
+  ARG_UNUSED(arg1);
+  ARG_UNUSED(arg2);
+  ARG_UNUSED(arg3);
 
   while (1) {
     if (zbus_sub_wait(&control_link_sub, &channel, K_FOREVER) != 0) {

@@ -13,7 +13,7 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/zbus/zbus.h>
 
-#define CODEC_CONTROLLER_THREAD_STACK_SIZE 1024
+#define CODEC_CONTROLLER_THREAD_STACK_SIZE 8192
 #define CODEC_CONTROLLER_THREAD_PRIORITY 3
 #define CODEC_CONTROLLER_SUBSCRIBER_QUEUE_SIZE 8
 #define CODEC_CONTROLLER_OBSERVER_PRIORITY 0
@@ -304,9 +304,13 @@ static void codec_controller_state_machine(const struct zbus_channel* channel)
 
 /* === Thread === */
 
-static void codec_controller_thread(void)
+static void codec_controller_thread(void* arg1, void* arg2, void* arg3)
 {
   const struct zbus_channel* channel;
+
+  ARG_UNUSED(arg1);
+  ARG_UNUSED(arg2);
+  ARG_UNUSED(arg3);
 
   while (1) {
     if (zbus_sub_wait(&codec_controller_sub, &channel, K_FOREVER) != 0) {

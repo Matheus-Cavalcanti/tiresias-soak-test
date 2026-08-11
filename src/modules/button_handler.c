@@ -95,10 +95,14 @@ static void button_isr(const struct device *port, struct gpio_callback *cb, uint
 	k_timer_start(&button_debounce_timer, K_MSEC(CONFIG_BUTTON_DEBOUNCE_MS), K_NO_WAIT);
 }
 
-static void button_publish_thread(void)
+static void button_publish_thread(void *arg1, void *arg2, void *arg3)
 {
 	btn_chan_msg_t msg;
 	int ret;
+
+	ARG_UNUSED(arg1);
+	ARG_UNUSED(arg2);
+	ARG_UNUSED(arg3);
 
 	while (1) {
 		k_msgq_get(&button_queue, &msg, K_FOREVER);
