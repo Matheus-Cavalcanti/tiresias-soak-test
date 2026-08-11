@@ -169,7 +169,11 @@ int adau1787_config_i2c(void)
     return -1;
   }
 
-  i2c_configure(i2c_dev, I2C_SPEED_SET(I2C_SPEED_FAST_PLUS));
+  ret = i2c_configure(i2c_dev, I2C_SPEED_SET(I2C_SPEED_FAST_PLUS));
+  if (ret != 0) {
+    LOG_ERR("Failed to configure I2C_1: %d", ret);
+    return ret;
+  }
 
   LOG_DBG("SCL pin: %d", NRF_TWIM1->PSEL.SCL);
   LOG_DBG("SDA pin: %d", NRF_TWIM1->PSEL.SDA);

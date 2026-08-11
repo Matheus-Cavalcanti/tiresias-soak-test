@@ -24,12 +24,20 @@
 #include "adau1787.h"
 #include <zephyr/drivers/i2c.h>
 #include <zephyr/kernel.h>
+#include <zephyr/sys/byteorder.h>
 
 /*
  * TODO: Update for your system's data type
  */
 typedef unsigned short ADI_DATA_U16;
 typedef unsigned char ADI_REG_TYPE;
+
+#define SIGMASTUDIO_DELAY_WIDTH_BYTES 2U
+
+/* The ADAU1787 SigmaStudio export references this width without defining it. */
+#ifndef REG_POWER_EN_DELAY_IC_1_Sigma_BYTE
+#define REG_POWER_EN_DELAY_IC_1_Sigma_BYTE SIGMASTUDIO_DELAY_WIDTH_BYTES
+#endif
 
 extern const struct i2c_dt_spec dev_i2c;
 
@@ -59,9 +67,10 @@ extern const struct i2c_dt_spec dev_i2c;
  * Writes delay (in ms)
  */
 #define SIGMA_WRITE_DELAY(devAddress, length, pData)                                                                   \
-  {                                                                                                                    \
-    k_msleep(*(pData));                                                                                                \
-  }
+  do {                                                                                                                 \
+    BUILD_ASSERT((length) == SIGMASTUDIO_DELAY_WIDTH_BYTES, "SigmaStudio delay must be a 16-bit value");               \
+    k_msleep((int32_t)sys_get_be16(pData));                                                                            \
+  } while (0)
 
 /*
  * Read device registers
