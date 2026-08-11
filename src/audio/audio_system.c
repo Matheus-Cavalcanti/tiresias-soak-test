@@ -12,6 +12,7 @@
 #include <tone.h>
 #include <zephyr/kernel.h>
 #include <zephyr/shell/shell.h>
+#include <zephyr/sys/atomic.h>
 
 #include "audio_datapath.h"
 #include "audio_i2s.h"
@@ -47,6 +48,7 @@ static struct k_poll_event encoder_evt
     = K_POLL_EVENT_INITIALIZER(K_POLL_TYPE_SIGNAL, K_POLL_MODE_NOTIFY_ONLY, &encoder_sig);
 
 static struct sw_codec_config sw_codec_cfg;
+static atomic_t pipeline_running = ATOMIC_INIT(0);
 /* Buffer which can hold max 1 period test tone at 1000 Hz */
 static int16_t test_tone_buf[CONFIG_AUDIO_SAMPLE_RATE_HZ / 1000];
 static size_t test_tone_size;
@@ -282,12 +284,12 @@ int audio_system_decode(void const* const encoded_data, size_t encoded_data_size
   static void* pcm_raw_data;
   size_t pcm_block_size;
 
-  if (!sw_codec_cfg.initialized) {
+  if (atomic_get(&pipeline_running) == 0) {
     /* Throw away data */
     /* This can happen when using play/pause since there might be
      * some packages left in the buffers
      */
-    LOG_DBG("Trying to decode while codec is not initialized");
+    LOG_DBG("Trying to decode while the audio pipeline is not running");
     return -EPERM;
   }
 
@@ -351,11 +353,18 @@ int audio_system_decode(void const* const encoded_data, size_t encoded_data_size
   return 0;
 }
 
+uint8_t stream_state_get(void)
+{
+  return atomic_get(&pipeline_running) != 0 ? STATE_STREAMING : STATE_PAUSED;
+}
+
 /**@brief Initializes the FIFOs, the codec, and starts the I2S
  */
 void audio_system_start(void)
 {
   int ret;
+
+  atomic_clear(&pipeline_running);
 
   if (CONFIG_AUDIO_DEV == HEADSET) {
     audio_headset_configure();
@@ -403,11 +412,15 @@ void audio_system_start(void)
   /* Control of the hardware codec is the responsibility of the Codec Controller subsystem. */
   // hw_codec_log_status_2();
 #endif /* ((CONFIG_AUDIO_SOURCE_USB) && (CONFIG_AUDIO_DEV == GATEWAY))) */
+
+  atomic_set(&pipeline_running, 1);
 }
 
 void audio_system_stop(void)
 {
   int ret;
+
+  atomic_clear(&pipeline_running);
 
   if (!sw_codec_cfg.initialized) {
     LOG_WRN("Codec already unitialized");
