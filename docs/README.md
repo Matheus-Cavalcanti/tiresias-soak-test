@@ -14,7 +14,7 @@ structured that way, without becoming source-level API references.
 - [Firmware control plane](architecture/control-plane.md): subsystem naming,
   state-machine ownership, and coordination.
 - [Threads and execution contexts](architecture/threads-and-contexts.md): control-plane
-  threads, callback boundaries, data-plane workers, and migration from legacy contexts.
+  threads, callback boundaries, data-plane workers, and implementation status.
 - [Zbus channels](architecture/zbus.md): private-state mirroring, control-plane publishers,
   subscribers, acknowledgement behavior, and delivery constraints.
 - [Hardware](architecture/hardware.md): principal hardware components and

@@ -106,9 +106,9 @@ the stale mirror as a reporting failure rather than recovering state by reading 
 
 The first implementation uses optimistic commands with authoritative state reports. A
 publisher requests an operation once and assumes that the receiving subsystem accepted it
-unless a result event reports failure. The Device Controller caches subsystem state reports
-and uses those observable conditions to determine when initialization or a lifecycle
-transition has completed.
+and uses state-channel notifications to determine when initialization or a lifecycle
+transition has completed. The Device Controller reads the latest state snapshots when it
+handles a notification; it does not maintain separate cached copies.
 
 This initial model intentionally does not maintain per-subsystem outstanding-command
 records or correlate every result with stored command metadata. A single lifecycle target
@@ -175,6 +175,9 @@ High-level operating modes should be added only when they change system-wide pol
 Duplicating `BROADCAST_ONLY` in the Device Controller subsystem merely to mirror the Codec
 Controller subsystem would create two owners for the same fact.
 
+The initial PoC implements `START`, initialization, `OPERATIONAL`, and `FAULT`. Low-power,
+power-off, wake, and recovery transitions remain reserved by the model.
+
 ## 2. Control Link subsystem
 
 ### Why it exists
@@ -213,6 +216,9 @@ stateDiagram-v2
 
 Individual GATT reads, writes, and notifications normally remain events or actions within
 `CONNECTED`; they are not persistent states.
+
+Control Link behavior is not implemented in the initial PoC; its thread and state-machine
+structure remain disabled placeholders for the later GATT work.
 
 ## 3. Audio Streaming subsystem
 
@@ -278,6 +284,11 @@ Control Link:         CONNECTED
 Audio Streaming:      STREAMING
 ```
 
+For the initial PoC, `START_SCAN` from `DISABLED` performs receiver initialization and
+starts scanning in one action. Stream or synchronization loss is cleaned up and returns
+directly to `SCANNING`; the explicit `RECOVERING` state and the enable/disable/reset command
+paths remain reserved for a later implementation stage.
+
 ## 4. Codec Controller subsystem
 
 ### Why it exists
@@ -334,6 +345,9 @@ to every presentation mode.
 state, the Codec Controller performs the required stop and power-down actions internally
 before reporting `OFF`.
 
+The initial PoC implements initialization, local/broadcast selection, and automatic
+fallback to local audio. Power-down and reset behavior remain reserved by the model.
+
 Codec configuration and parameter operations are short and synchronous at this stage. The
 Codec Controller subsystem handles them as transition actions or events within the current
 `ACTIVE` substate rather than modeling them as a persistent state.
@@ -346,15 +360,16 @@ audio is selected:
 ```mermaid
 sequenceDiagram
     participant CTRL as Device Controller
-    participant BRX as Audio Streaming
+    participant STREAM as Audio Streaming
     participant CODEC as Codec Controller
 
-    CTRL->>BRX: START_SCAN
-    BRX-->>CTRL: BIS_STARTED
+    CTRL->>STREAM: START_SCAN
+    STREAM-->>CTRL: STREAMING state mirror
+    Note over CTRL: Button Input reports a mode-switch request
     CTRL->>CODEC: SELECT_BROADCAST
     CODEC-->>CTRL: BROADCAST_ONLY
 
-    BRX-->>CODEC: BIS_STOPPED
+    STREAM-->>CODEC: State leaves STREAMING
     CODEC->>CODEC: Select local path
     CODEC-->>CTRL: LOCAL_ONLY
 ```
@@ -363,8 +378,8 @@ This is a command-and-report relationship:
 
 - The Device Controller subsystem requests a desired high-level behavior.
 - The owning subsystem determines the detailed transition sequence.
-- The subsystem reports completion by mirroring its new private state, or reports failure
-  through its result-event channel.
+- The subsystem reports completion by mirroring its new private state. Result-event
+  reporting is deferred beyond the initial PoC.
 - The Device Controller subsystem does not write another subsystem's state directly.
 
 ## Supporting subsystems and modules
@@ -425,7 +440,7 @@ The intended publishers, subscribers, completion reporting, and delivery constra
 for these messages are defined in [zbus.md](zbus.md).
 
 The thread assignment, callback boundaries, data-plane workers, priority policy, and
-migration from legacy execution contexts are defined in
+implementation status are defined in
 [threads-and-contexts.md](threads-and-contexts.md).
 
 The audio data plane remains separate:
@@ -446,14 +461,16 @@ Battery monitoring is omitted at this development stage. On the current Tiresias
 hardware revision, the battery-monitoring signal is connected to a digital-only nRF5340
 GPIO and cannot be sampled by the SAADC.
 
-## Relationship to the current implementation
+## Relationship to the implementation
 
-| Current component | Current behavior | Architectural direction |
+| Component | Current behavior | Architectural status |
 |---|---|---|
-| Current `Controller` implementation | Maintains the overall `OFF`, `INITIALIZING`, `STANDARD`, `BROADCAST_STREAMING`, and `ERROR` states | Becomes the Device Controller subsystem and stops mirroring detailed codec presentation mode. |
-| Current Bluetooth implementation | Maintains `OFF`, `INITIALIZING`, `READY`, and `ERROR` | Separates into the Control Link and Audio Streaming subsystems. |
-| Current `audio_control` implementation | Maintains `OFF`, `INITIALIZING`, `STANDARD`, `BROADCAST_STREAMING`, and `ERROR` | Evolves into the Codec Controller subsystem. |
-| ADAU1787 driver and control code | Performs codec programming and parameter operations | Becomes the implementation behind the Codec Controller subsystem; short synchronous configuration operations remain actions rather than states. |
+| Device Controller subsystem | Supervises startup and user mode-selection policy on the main thread without mirroring codec presentation mode. | Implemented for the initial local-audio and BIS-reception path. |
+| Audio Streaming subsystem | Initializes Bluetooth and manages broadcast discovery, PA/BIS synchronization, pipeline lifecycle, and recovery. | Implemented for BIS reception; future CIS support remains possible. |
+| Codec Controller subsystem | Owns ADAU1787 initialization, local/I2S selection, state, and presentation indication. | Implemented with `LOCAL_ONLY` and `BROADCAST_ONLY` presentation modes. |
+| Control Link subsystem | Defines its state machine and execution context but does not yet implement connectable BLE or GATT behavior. | Deferred beyond the initial PoC. |
+| Legacy `controller`, `bluetooth`, and `audio_control` sources | Remain in the repository as reference but are not compiled. | Superseded by the subsystem implementations. |
+| ADAU1787 driver and control code | Performs codec programming and parameter operations. | Serves as the implementation behind the Codec Controller subsystem; short synchronous configuration operations remain actions rather than states. |
 | Zbus channels | Carry commands, state reports, button events, and LE Audio lifecycle events | Remain the principal control-plane communication mechanism. |
 | LE Audio RX and audio datapath | Use FIFOs, LC3 decoding, timing compensation, and I2S buffering | Remain in the data plane rather than becoming state-machine event traffic. |
 

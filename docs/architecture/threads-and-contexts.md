@@ -28,6 +28,7 @@ subscriber queues, and the additional concurrency that must be reasoned about.
 ```mermaid
 flowchart TB
     main["main thread<br/>Device Controller"]
+    board["board initialization"]
     codec["Codec Controller thread<br/>codec lifecycle and I2C"]
     control["Control Link thread<br/>BLE control and GATT requests"]
     streaming["Audio Streaming thread<br/>PA/BIS lifecycle"]
@@ -50,7 +51,8 @@ flowchart TB
     main -->|"commands"| codec
     main -->|"commands"| control
     main -->|"commands"| streaming
-    main -->|"indication commands"| led
+    board -->|"boot indication"| led
+    codec -->|"presentation indications"| led
 
     streaming -->|"start/stop data reception"| rx
     rx -->|"PCM buffers"| i2s
@@ -225,8 +227,8 @@ operations must also avoid holding locks needed by a higher-priority data-plane 
 
 ## Stack and queue sizing
 
-Thread stacks and subscriber queues are statically reserved RAM. Initial skeleton values
-are placeholders, not proof that the eventual handlers fit.
+Thread stacks and subscriber queues are statically reserved RAM. The current PoC values
+are conservative initial allocations, not proof that every eventual handler fits.
 
 Before release:
 
@@ -245,20 +247,19 @@ commands, command/result correlation, stale-result detection, deadlines, bounded
 and escalation policies. These reliability guardrails are future work after the lifecycle
 flow is validated; [zbus.md](zbus.md) defines the staged delivery policy.
 
-## Migration from the current implementation
+## Implementation status
 
-The source currently contains the new subsystem skeletons alongside legacy service
-threads. The intended direction is:
+The initial local-audio and BIS-reception control path now uses the new subsystem
+execution contexts. The legacy source files remain in the repository for reference but
+are excluded from the application target.
 
-| Current execution context | Direction |
+| Execution context | Status |
 |---|---|
-| Dedicated Device Controller thread | Move its subscriber loop to the main thread. |
-| Codec Controller thread | Retain and replace Codec Controller pseudocode with owned codec behavior. |
-| Control Link thread | Retain and migrate connectable BLE and future GATT control behavior into it. |
-| Audio Streaming thread | Retain and migrate broadcast discovery and synchronization behavior into it. |
-| Legacy `audio_control` thread | Remove after codec lifecycle and data-plane control have migrated. |
-| Legacy `bluetooth` service thread | Remove after behavior has migrated to Control Link and Audio Streaming. |
-| Legacy `controller` source | Keep excluded; Device Controller replaces it. |
+| Main thread | Runs the Device Controller subscriber loop. |
+| Codec Controller thread | Owns ADAU1787 initialization, mode selection, state, and presentation indication. |
+| Control Link thread | Present but intentionally left as pseudocode until connectable BLE and GATT control are implemented. |
+| Audio Streaming thread | Owns Bluetooth initialization and the broadcast discovery, synchronization, and recovery lifecycle. |
+| Legacy `controller`, `audio_control`, and `bluetooth` sources | Retained only as reference and excluded from the application target. |
 | Audio datapath and encoder threads | Retain as data-plane workers. |
 | Button publication and LED workers | Retain unless a measured reason favors an equivalent work-queue design. |
 

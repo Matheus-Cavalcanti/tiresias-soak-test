@@ -158,7 +158,7 @@ typedef struct audio_streaming_result_chan_msg {
   int error;
 } audio_streaming_result_chan_msg;
 
-/* === Bluetooth service === */
+/* === Legacy Bluetooth service (excluded from the application target) === */
 typedef enum bt_cmd {
 	BT_CMD_INIT,
 } bt_cmd;
@@ -178,7 +178,7 @@ typedef struct bt_state_chan_msg {
 	enum bt_state state;
 } bt_state_chan_msg;
 
-/* === Audio control service === */
+/* === Legacy audio control service (excluded from the application target) === */
 typedef enum audio_cmd {
 	AUDIO_CMD_INIT,
 	AUDIO_CMD_CODEC_SWITCH,

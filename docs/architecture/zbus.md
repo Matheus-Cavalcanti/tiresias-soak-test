@@ -18,12 +18,13 @@ remain in the data plane and must not be transported through these channels.
   channel.
 - The private initial state and the channel's initial message must match before observers
   can receive notifications.
-- The Device Controller subsystem statically observes subsystem state channels so
-  initialization, completion, and fault transitions wake the supervisor. Other subsystems
-  may read the cached value without subscribing when they only need a snapshot.
+- The Device Controller subsystem statically observes the state channels required by the
+  current PoC so initialization, completion, and fault transitions wake the supervisor.
+  Other subsystems may read the latest channel mirror without subscribing when they only
+  need a snapshot.
 - Completion of a successful command that changes durable state is visible in the
-  corresponding state report. A rejected command or a nonfatal failure that leaves the
-  state unchanged is reported on the subsystem's result-event channel.
+  corresponding state report. Result-event channels are reserved for a later reliability
+  stage; the initial PoC does not publish or consume them.
 - `ERROR` or `FAULT` states are reserved for persistent subsystem or device failures. A
   rejected command does not by itself place a state machine in an error state.
 - A failed state publication does not transfer authority to the stale channel value. The
@@ -77,6 +78,7 @@ Messages published on this channel request changes to the board's LED indication
 
 ### Publishers
 
+- Board initialization publishes the boot indication on `LED_1`.
 - The Codec Controller subsystem publishes indications for its own presentation state.
 - Additional publishers require an explicit indication-ownership or priority policy to
   prevent different subsystems from issuing conflicting LED commands.
@@ -85,7 +87,8 @@ Messages published on this channel request changes to the board's LED indication
 
 Messages published on this channel request whole-device lifecycle or policy behavior, such
 as `START`, `LOW_POWER`, `WAKE`, `POWER_OFF`, or `RECOVER`. Codec presentation requests do
-not belong on this channel.
+not belong on this channel. Only `START` is implemented in the initial PoC; the other
+commands reserve the future lifecycle contract.
 
 ### Subscribers and listeners
 
@@ -120,7 +123,8 @@ Messages on this channel request behavior from the Codec Controller subsystem. I
 commands include `INITIALIZE`, `SELECT_LOCAL`, `SELECT_BROADCAST`, `POWER_DOWN`, and
 `RESET`. `INITIALIZE` configures the codec and starts the local audio path, reaching
 `LOCAL_ONLY`. `POWER_DOWN` is a terminal semantic request: when necessary, the Codec
-Controller stops presentation internally before reporting `OFF`.
+Controller stops presentation internally before reporting `OFF`. The initial PoC implements
+only initialization and presentation selection; power-down and reset remain reserved.
 
 ### Subscribers and listeners
 
@@ -154,11 +158,11 @@ remains `LOCAL_ONLY` because no broadcast stream is available.
 
 ### Subscribers and listeners
 
-- The Device Controller subsystem is statically subscribed.
+- No subscriber is registered in the initial PoC.
 
 ### Publishers
 
-- Only the Codec Controller subsystem publishes on this channel.
+- Codec Controller will be the sole publisher when result reporting is implemented.
 
 ## Control Link command
 
@@ -182,8 +186,7 @@ synchronization.
 
 ### Subscribers and listeners
 
-- The Device Controller subsystem is statically subscribed so connection and fault
-  transitions wake the supervisor.
+- The Device Controller subsystem may subscribe when Control Link behavior is implemented.
 - Other subsystems may read the latest message when they only need a snapshot.
 
 ### Publishers
@@ -199,11 +202,11 @@ do not directly change another subsystem's state.
 
 ### Subscribers and listeners
 
-- The Device Controller subsystem is statically subscribed.
+- No subscriber is registered in the initial PoC.
 
 ### Publishers
 
-- Only the Control Link subsystem publishes on this channel.
+- Control Link will be the sole publisher when its behavior is implemented.
 
 ## Audio Streaming command
 
@@ -212,6 +215,8 @@ commands include `ENABLE_RECEIVER`, `START_SCAN`, `STOP_SCAN`, `STOP`, `DISABLE_
 and `RESET`. `STOP` is valid from any active enabled state and owns the required stop and
 cleanup before transitioning to `IDLE`. `DISABLE_RECEIVER` is valid from any enabled state
 and owns the required stop, synchronization cleanup, and transition to `DISABLED`.
+The initial PoC implements `START_SCAN` (including first-time receiver initialization) and
+`STOP`; the other commands reserve the future lifecycle contract.
 
 ### Subscribers and listeners
 
@@ -248,13 +253,15 @@ not produce a durable Audio Streaming state transition.
 
 ### Subscribers and listeners
 
-- The Device Controller subsystem is statically subscribed.
+- No subscriber is registered in the initial PoC.
 
 ### Publishers
 
-- Only the Audio Streaming subsystem publishes on this channel.
+- Audio Streaming will be the sole publisher when result reporting is implemented.
 
-Raw Bluetooth-management and LE Audio callback channels may remain internal implementation
-details of the Control Link and Audio Streaming subsystems. Public control-plane
-subsystems should depend on the semantic contracts above rather than on stack-specific
-events or pointers.
+Raw Bluetooth-management and LE Audio callback channels remain internal implementation
+details of the Control Link and Audio Streaming subsystems. Audio Streaming consumes them
+with a Zbus message subscriber so every published lifecycle payload is copied and delivered
+in order; a normal subscriber that rereads only the latest channel value is not sufficient
+for the `CONFIG_RECEIVED` to `STREAMING` sequence. Public control-plane subsystems should
+depend on the semantic contracts above rather than on stack-specific events or pointers.
