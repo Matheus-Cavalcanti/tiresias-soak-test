@@ -158,48 +158,6 @@ typedef struct audio_streaming_result_chan_msg {
   int error;
 } audio_streaming_result_chan_msg;
 
-/* === Legacy Bluetooth service (excluded from the application target) === */
-typedef enum bt_cmd {
-	BT_CMD_INIT,
-} bt_cmd;
-
-typedef enum bt_state {
-	BT_STATE_OFF,
-	BT_STATE_INITIALIZING,
-	BT_STATE_READY,
-	BT_STATE_ERROR,
-} bt_state;
-
-typedef struct bt_cmd_chan_msg {
-	enum bt_cmd cmd;
-} bt_cmd_chan_msg;
-
-typedef struct bt_state_chan_msg {
-	enum bt_state state;
-} bt_state_chan_msg;
-
-/* === Legacy audio control service (excluded from the application target) === */
-typedef enum audio_cmd {
-	AUDIO_CMD_INIT,
-	AUDIO_CMD_CODEC_SWITCH,
-} audio_cmd;
-
-typedef enum audio_state {
-	AUDIO_STATE_OFF,
-	AUDIO_STATE_INITIALIZING,
-	AUDIO_STATE_STANDARD,
-	AUDIO_STATE_BROADCAST_STREAMING,
-	AUDIO_STATE_ERROR,
-} audio_state;
-
-typedef struct audio_cmd_chan_msg {
-	enum audio_cmd cmd;
-} audio_cmd_chan_msg;
-
-typedef struct audio_state_chan_msg {
-	enum audio_state state;
-} audio_state_chan_msg;
-
 /* === LED === */
 typedef enum board_led_t {
   LED_1,
