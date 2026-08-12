@@ -13,6 +13,9 @@ structured that way, without becoming source-level API references.
   and the current proof-of-concept environment.
 - [Firmware control plane](architecture/control-plane.md): subsystem naming,
   state-machine ownership, and coordination.
+- [Control Link and remote management](architecture/control-link.md): custom BLE
+  service, discoverable codec parameter catalog, security, system integration, and future
+  Auracast Broadcast Assistant support.
 - [Threads and execution contexts](architecture/threads-and-contexts.md): control-plane
   threads, callback boundaries, data-plane workers, and implementation status.
 - [Zbus channels](architecture/zbus.md): private-state mirroring, control-plane publishers,

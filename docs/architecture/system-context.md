@@ -170,8 +170,10 @@ environment remain outside that boundary.
 ## Scope of this document
 
 The diagrams describe relationships at the system boundary, not the protocols or internal
-implementation used to realize them. Security and privacy boundaries, clinical fitting
-workflow, telemetry storage, detailed phone responsibilities, and the transition from the
+implementation used to realize them. The conceptual BLE control, codec-parameter, and
+Broadcast Assistant boundaries are defined in
+[control-link.md](control-link.md). Detailed security credentials, clinical fitting
+workflow, telemetry storage, phone user experience, and the deployment transition from the
 development broadcaster to an Auracast-compliant source remain subjects for later
 refinement.
 
