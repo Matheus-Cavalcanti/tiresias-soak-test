@@ -15,6 +15,12 @@
 
 #include <errno.h>
 #include <zephyr/bluetooth/bluetooth.h>
+#include <zephyr/kernel.h>
+#include <zephyr/zbus/zbus.h>
+
+#define AUDIO_STREAMING_ACTION_TIMEOUT_MS 100
+
+ZBUS_CHAN_DECLARE(led_chan);
 
 static int scan_start(const char* broadcast_name)
 {
@@ -138,4 +144,35 @@ int audio_streaming_actions_stop(void)
   }
 
   return broadcast_sink_disable();
+}
+
+int audio_streaming_actions_set_indicator(audio_streaming_state state)
+{
+  led_cmd_t command;
+
+  switch (state) {
+  case AUDIO_STREAMING_STATE_SCANNING:
+    command = BLINK;
+    break;
+  case AUDIO_STREAMING_STATE_PA_SYNCED:
+  case AUDIO_STREAMING_STATE_BIS_SYNCING:
+  case AUDIO_STREAMING_STATE_STREAMING:
+    command = TURN_ON;
+    break;
+  case AUDIO_STREAMING_STATE_DISABLED:
+  case AUDIO_STREAMING_STATE_IDLE:
+  case AUDIO_STREAMING_STATE_RECOVERING:
+  case AUDIO_STREAMING_STATE_ERROR:
+    command = TURN_OFF;
+    break;
+  default:
+    return -EINVAL;
+  }
+
+  const led_chan_msg_t msg = {
+    .led = LED_3,
+    .cmd = command,
+  };
+
+  return zbus_chan_pub(&led_chan, &msg, K_MSEC(AUDIO_STREAMING_ACTION_TIMEOUT_MS));
 }

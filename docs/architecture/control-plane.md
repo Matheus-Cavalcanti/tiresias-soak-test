@@ -311,6 +311,11 @@ starts scanning in one action. Stream or synchronization loss is cleaned up and 
 directly to `SCANNING`; the explicit `RECOVERING` state and the enable/disable/reset command
 paths remain reserved for a later implementation stage.
 
+Audio Streaming owns LED 3 as its local status indicator. The LED blinks in `SCANNING`,
+stays continuously on in `PA_SYNCED`, `BIS_SYNCING`, and `STREAMING` while periodic
+advertising synchronization is held, and is off in `DISABLED`, `IDLE`, `RECOVERING`, and
+`ERROR`.
+
 ## 4. Codec Controller subsystem
 
 ### Why it exists

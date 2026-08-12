@@ -72,11 +72,11 @@ over one GPIO:
 |---|---|
 | `LED_1` | Control Link: blink while advertising, continuously on while connected, off while disabled or in error. |
 | `LED_2` | Codec Controller presentation indication. |
-| `LED_3` | Unassigned. |
+| `LED_3` | Audio Streaming: blink while scanning, continuously on while PA synchronization is held, off while idle, disabled, recovering, or in error. |
 
 Board initialization configures all LEDs inactive and does not publish a boot-time
-`LED_1` command. A future publisher must be assigned an unused LED or introduce an
-explicit priority/composition policy.
+`LED_1` command. Each subsystem publishes only for its assigned LED. Any future shared
+ownership requires an explicit priority or composition policy.
 
 ## Commands
 
