@@ -1,7 +1,7 @@
 /*
  * File:           C:\users\crossover\Desktop\exports\adau_1787_IC_1_FAST_REG.h
  *
- * Created:        Saturday, August 1, 2026 2:39:58 PM
+ * Created:        Wednesday, August 12, 2026 5:16:02 PM
  * Description:    adau_1787:IC 1-Fast control register definitions.
  *
  * This software is distributed in the hope that it will be useful,
@@ -568,7 +568,7 @@
 /* SDSP_CTRL1  - Registers (IC 1_Fast) */
 #define REG_SDSP_CTRL1_IC_1_Fast_ADDR             0xC080
 #define REG_SDSP_CTRL1_IC_1_Fast_BYTE             1
-#define REG_SDSP_CTRL1_IC_1_Fast_VALUE            0x1
+#define REG_SDSP_CTRL1_IC_1_Fast_VALUE            0x11
 
 /* SDSP_CTRL2  - Registers (IC 1_Fast) */
 #define REG_SDSP_CTRL2_IC_1_Fast_ADDR             0xC081
@@ -2160,7 +2160,7 @@
 
 /* SDSP_CTRL1 (IC 1_Fast) */
 #define R109_SDSP_RATE_SOURCE_IC_1_Fast           0x1    /* 0001b	[3:0] */
-#define R109_SDSP_SPEED_IC_1_Fast                 0x0    /* 0b	[4] */
+#define R109_SDSP_SPEED_IC_1_Fast                 0x1    /* 1b	[4] */
 #define R109_SDSP_RATE_SOURCE_IC_1_Fast_MASK      0xF
 #define R109_SDSP_RATE_SOURCE_IC_1_Fast_SHIFT     0
 #define R109_SDSP_SPEED_IC_1_Fast_MASK            0x10
