@@ -20,6 +20,8 @@ LOG_MODULE_REGISTER(adau1787_driver, LOG_LEVEL_INF);
 
 /* Two complete audio frames at 16 kHz. */
 #define ADAU1787_SAFELOAD_DELAY_US 125U
+/* The exported safeload module contains data slots plus target and trigger parameters. */
+#define ADAU1787_SAFELOAD_MAX_WORDS (MOD_SAFELOADMODULE_COUNT - 2U)
 BUILD_ASSERT(PARAM_ADDR_IC_1_Sigma == 0x2000, "Param Memory Address must be 0x2000.");
 
 /** @brief Device Tree Specification for ADAU1787 */
@@ -258,18 +260,11 @@ int adau1787_safeload_write(sub_addr_t target_addr, uint8_t* data, size_t num_wo
     return -EINVAL;
   }
 
-  const uint32_t target_word_addr = (target_addr - ADAU1787_PARAM_RAM_BASE) / ADAU1787_PARAM_RAM_WIDTH_BYTES;
-  if (target_word_addr == 0) {
-    LOG_ERR("Safeload cannot target parameter word 0");
-    return -EINVAL;
-  }
-
-  const uint32_t safeload_target = target_word_addr - 1;
   param_word_t target_addr_buf = {
-    (uint8_t)((safeload_target >> 24) & 0xFF),
-    (uint8_t)((safeload_target >> 16) & 0xFF),
-    (uint8_t)((safeload_target >> 8) & 0xFF),
-    (uint8_t)(safeload_target & 0xFF),
+    0x00,
+    0x00,
+    (uint8_t)((target_addr >> 8) & 0xFF),
+    (uint8_t)(target_addr & 0xFF),
   };
   param_word_t num_words_buf = {
     0x00,
@@ -278,19 +273,19 @@ int adau1787_safeload_write(sub_addr_t target_addr, uint8_t* data, size_t num_wo
     (uint8_t)num_words,
   };
 
-  int ret = adau1787_write(SAFELOAD_DATA_1, data, data_len);
+  int ret = adau1787_write(MOD_SAFELOADMODULE_DATALOADSTART_SAFELOAD_ADDR, data, data_len);
   if (ret != 0) {
     LOG_ERR("Failed to write Safeload Data.");
     return ret;
   }
 
-  ret = adau1787_write(SAFELOAD_TARGET_ADDR, target_addr_buf, sizeof(target_addr_buf));
+  ret = adau1787_write(MOD_SAFELOADMODULE_ADDRESSLOAD_SAFELOAD_ADDR, target_addr_buf, sizeof(target_addr_buf));
   if (ret != 0) {
     LOG_ERR("Failed to write Safeload Target Address.");
     return ret;
   }
 
-  ret = adau1787_write(SAFELOAD_NUM_WORDS, num_words_buf, sizeof(num_words_buf));
+  ret = adau1787_write(MOD_SAFELOADMODULE_NUMLOAD_SAFELOAD_ADDR, num_words_buf, sizeof(num_words_buf));
   if (ret != 0) {
     LOG_ERR("Failed to write Safeload Num Words.");
     return ret;
