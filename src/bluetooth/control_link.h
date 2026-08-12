@@ -7,4 +7,6 @@
 #ifndef CONTROL_LINK_H
 #define CONTROL_LINK_H
 
+#define CONTROL_LINK_ADV_SET_INDEX 0
+
 #endif /* CONTROL_LINK_H */

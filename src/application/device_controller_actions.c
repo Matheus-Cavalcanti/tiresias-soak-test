@@ -14,6 +14,7 @@
 #define DEVICE_CONTROLLER_ACTION_TIMEOUT_MS 100
 
 ZBUS_CHAN_DECLARE(codec_controller_cmd_chan);
+ZBUS_CHAN_DECLARE(control_link_cmd_chan);
 ZBUS_CHAN_DECLARE(audio_streaming_cmd_chan);
 
 int publish_codec_controller_command(codec_controller_cmd command)
@@ -32,4 +33,13 @@ int publish_audio_streaming_command(audio_streaming_cmd command)
   };
 
   return zbus_chan_pub(&audio_streaming_cmd_chan, &msg, K_MSEC(DEVICE_CONTROLLER_ACTION_TIMEOUT_MS));
+}
+
+int publish_control_link_command(control_link_cmd command)
+{
+  control_link_cmd_chan_msg msg = {
+    .cmd = command,
+  };
+
+  return zbus_chan_pub(&control_link_cmd_chan, &msg, K_MSEC(DEVICE_CONTROLLER_ACTION_TIMEOUT_MS));
 }
