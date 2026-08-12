@@ -51,7 +51,7 @@ flowchart TB
     main -->|"commands"| codec
     main -->|"commands"| control
     main -->|"commands"| streaming
-    board -->|"boot indication"| led
+    control -->|"Control Link indication"| led
     codec -->|"presentation indications"| led
 
     streaming -->|"start/stop data reception"| rx
@@ -106,6 +106,12 @@ session, protocol state, authorization, and request routing. The shared Bluetoot
 Management module performs one-time stack initialization and physical advertising and
 connection procedures; Control Link owns the policy that requests their availability. The
 custom GATT service receives remote device and codec-configuration requests.
+
+Control Link and Audio Streaming may both enter the shared Bluetooth initializer. A mutex
+serializes the first attempt and all later callers receive its cached result, so neither
+thread owns initialization and correctness does not depend on which thread runs first.
+Their Bluetooth events are delivered through separate ordered message-subscriber FIFOs;
+each thread filters the event families and resource indexes it owns.
 
 Bluetooth callbacks must not perform codec operations. A callback validates the minimum
 framing, copies the request into an owned bounded queue, wakes the Control Link thread, and
@@ -262,7 +268,7 @@ are excluded from the application target.
 | Main thread | Runs the Device Controller subscriber loop. |
 | Codec Controller thread | Owns ADAU1787 initialization, mode selection, state, and presentation indication. |
 | Control Link thread | Owns connectable-advertising policy, ACL lifecycle state, and LED 1 indication; the custom service and request flow remain specified in [control-link.md](control-link.md). |
-| Audio Streaming thread | Owns Bluetooth initialization and the broadcast discovery, synchronization, and recovery lifecycle. |
+| Audio Streaming thread | Uses shared Bluetooth Management and owns broadcast discovery, synchronization, and recovery policy. |
 | Legacy `controller`, `audio_control`, and `bluetooth` sources | Retained only as reference and excluded from the application target. |
 | Audio datapath and encoder threads | Retain as data-plane workers. |
 | Button publication and LED workers | Retain unless a measured reason favors an equivalent work-queue design. |

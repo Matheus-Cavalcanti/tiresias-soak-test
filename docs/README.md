@@ -38,6 +38,9 @@ Module documents describe implementation-level responsibilities, public APIs,
 configuration requirements, and message contracts.
 
 - [Button Input subsystem](modules/button.md): button GPIO handling and Zbus events.
+- [Bluetooth Management](modules/bluetooth-management.md): shared Bluetooth initialization,
+  advertising execution, physical event fan-out, and Control Link/Audio Streaming
+  concurrency rules.
 - [ADAU1787 startup](modules/adau1787-startup.md): codec reset, I2C programming,
   SigmaStudio download, I2S activation, status checks, and failure behavior.
 - [LED Indicator subsystem](modules/led.md): LED commands, GPIO handling, and blink behavior.

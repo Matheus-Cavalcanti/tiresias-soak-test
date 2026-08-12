@@ -65,6 +65,19 @@ typedef struct led_chan_msg_t {
 Authorized subsystems publish commands to `led_chan`; the LED Indicator thread
 receives each command and updates the selected LED.
 
+Current indication ownership is assigned per LED so independent publishers cannot fight
+over one GPIO:
+
+| LED | Publisher and meaning |
+|---|---|
+| `LED_1` | Control Link: blink while advertising, continuously on while connected, off while disabled or in error. |
+| `LED_2` | Codec Controller presentation indication. |
+| `LED_3` | Unassigned. |
+
+Board initialization configures all LEDs inactive and does not publish a boot-time
+`LED_1` command. A future publisher must be assigned an unused LED or introduce an
+explicit priority/composition policy.
+
 ## Commands
 
 - `TURN_ON`: sets the selected LED active and removes it from the blink mask.

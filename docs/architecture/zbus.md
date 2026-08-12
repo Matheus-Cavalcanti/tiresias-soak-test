@@ -81,8 +81,9 @@ Messages published on this channel request changes to the board's LED indication
 
 ### Publishers
 
-- Board initialization publishes the boot indication on `LED_1`.
-- The Codec Controller subsystem publishes indications for its own presentation state.
+- The Control Link subsystem is the sole publisher for `LED_1`: blinking means
+  advertising, continuously on means connected, and off means disabled or error.
+- The Codec Controller subsystem publishes its presentation indication on `LED_2`.
 - Additional publishers require an explicit indication-ownership or priority policy to
   prevent different subsystems from issuing conflicting LED commands.
 
@@ -303,3 +304,24 @@ failure events carry the advertising-set index; ACL lifecycle events carry the c
 index and local role. This lets Control Link accept only its peripheral ACL and advertising
 set while Audio Streaming independently handles PA and broadcast events from the same
 ordered internal fan-out.
+
+The channel does not grant ownership merely because a subsystem receives every event.
+Consumers apply the following filters:
+
+| Consumer | Accepted Bluetooth Management events |
+|---|---|
+| Control Link | Start/failure for advertising set 0 and connection/disconnection for its peripheral connection index; security is reserved for the later authorized session. |
+| Audio Streaming | PA synchronization/loss and other broadcast-reception events. |
+
+Both observers are message subscribers, so each receives its own ordered copy. They do not
+compete for one queue entry, and one cannot consume an event before the other sees it.
+Borrowed pointer fields are valid only under their Bluetooth lifetime rules; Control Link
+uses copied scalar indexes for persistent correlation.
+
+The advertising completion events are necessary because `bt_mgmt_adv_start()` queues work.
+Its synchronous return reports admission only. `BT_MGMT_EXT_ADV_STARTED` confirms the
+physical procedure, while `BT_MGMT_EXT_ADV_FAILED` carries its asynchronous error. A
+subsystem must not publish an advertising semantic state based only on admission.
+
+See [Bluetooth Management](../modules/bluetooth-management.md) for initialization,
+resource-ownership, and concurrency details.

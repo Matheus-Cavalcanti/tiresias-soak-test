@@ -76,6 +76,13 @@ using a command and receives completion, state, or fault events in response. The
 Controller subsystem coordinates system-wide policy but does not directly manipulate codec
 registers, Bluetooth procedures, or audio buffers.
 
+Bluetooth Management is a shared mechanism module rather than another semantic subsystem.
+Control Link and Audio Streaming may both request the Bluetooth capabilities they own,
+while mutex-protected one-time initialization, indexed resources, and ordered copied event
+fan-out prevent them from duplicating global setup or consuming one another's events. The
+detailed contract is documented in
+[Bluetooth Management](../modules/bluetooth-management.md).
+
 ### State-centric model
 
 All state machines are **state-centric**. Each stateful subsystem keeps its authoritative
@@ -228,7 +235,7 @@ Individual GATT reads, writes, and notifications normally remain events or actio
 The `LINKED` distinction also permits a Broadcast Assistant to use the standardized BASS
 interface without opening the vendor-specific Tiresias protocol.
 
-The Control Link foundation initializes the shared Bluetooth stack, starts connectable
+The Control Link foundation uses the shared Bluetooth initializer, starts connectable
 advertising, exposes the standard read-only Device Information Service, tracks the
 physical ACL, restarts advertising after disconnection, and drives LED 1. Its `CONNECTED`
 state must evolve to the target `LINKED`/`READY` semantics, or an equivalent internal

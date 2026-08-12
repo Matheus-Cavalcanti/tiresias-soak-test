@@ -413,24 +413,127 @@ concern; ordinary visualization remains low-rate control-plane state.
 
 ### Shared Bluetooth initialization and resources
 
-Bluetooth is a platform resource shared by Control Link and Audio Streaming. The current
-compiled path initializes Bluetooth from `audio_streaming_actions_start()`. That ownership
-must be changed before Control Link can start independently.
+Bluetooth is one platform resource used by two independent subsystem lifecycles. Control
+Link needs an incoming peripheral ACL and GATT server; Audio Streaming needs observer
+scanning, periodic-advertising synchronization, and BIG/BIS reception. Requiring one
+subsystem to initialize or proxy every operation for the other would make control
+availability depend on broadcast reception, or broadcast reception depend on a control
+peer. It would also give that subsystem policy authority over a lifecycle it does not own.
 
-The Bluetooth Management module should provide one idempotent initialization path for
-`bt_enable()`, settings, callbacks, controller configuration, and advertising support.
-Device startup coordinates that shared readiness, after which:
+Both subsystems may therefore call the capability-oriented Bluetooth Management API, but
+neither owns the module. Bluetooth Management owns global stack mechanisms and translates
+controller callbacks into internal events. Each subsystem owns only its semantic policy:
 
-- Control Link requests the connectable advertising lifecycle and consumes ACL/security
-  events relevant to its retained peer;
-- Audio Streaming requests scanning, PA/BIG/BIS procedures, and consumes broadcast
-  lifecycle events; and
-- the advertising implementation composes the required custom-service discovery data,
-  BASS solicitation data, and other enabled service data into the available advertising
-  set rather than letting two subsystems create conflicting sets.
+| Operation or fact | Current owner |
+|---|---|
+| One-time `bt_enable()`, settings load, controller setup, callback registration, and advertising-worker setup | Bluetooth Management |
+| Connectable advertising request, accepted peripheral ACL, reconnection policy, and Control Link state | Control Link |
+| Broadcast scan, PA synchronization, BASE/BIG/BIS reception lifecycle, and Audio Streaming state | Audio Streaming |
+| Advertising-set creation and execution | Bluetooth Management advertising module |
+| Physical advertising, ACL, security, PA, and broadcast callback events | Bluetooth Management as sole `bt_mgmt_chan` publisher |
+| Device startup policy | Device Controller |
 
-This shared module performs Bluetooth procedures but does not become the owner of remote
-policy, broadcast-selection policy, or either subsystem's semantic state.
+`bt_mgmt_init()` is a mutex-protected, one-attempt operation. The first caller performs
+the global initialization while holding the initialization mutex. Concurrent callers wait;
+after the attempt completes, every caller receives the cached result without calling
+`bt_enable()`, loading settings, registering callbacks, or initializing advertising work a
+second time. The first failure is deliberately sticky for the boot because retrying an
+unknown partially completed global initialization could duplicate callbacks or controller
+configuration. Recovery from that condition currently requires a new boot. An
+`-EALREADY` result from `bt_enable()` is accepted so the remaining Tiresias-owned setup can
+be completed when the host was enabled earlier.
+
+The Device Controller publishes `ENABLE_CONTROL` and the Audio Streaming startup command
+independently. Control Link and Audio Streaming consequently race only to become the first
+caller of `bt_mgmt_init()`; the mutex and cached result make either order equivalent. The
+startup sequence does not rely on thread scheduling or on Control Link always winning that
+race.
+
+After shared initialization:
+
+- Control Link alone owns subsystem policy for advertising set index 0 in the current
+  build. Bluetooth Management may continue or recover that physical procedure after a
+  connection-establishment failure or directed-advertising timeout. The build asserts that
+  an extended advertising set exists, and the configured limit is one set.
+- Audio Streaming does not create a second advertising set. It uses the observer and
+  periodic-sync APIs, which are independent controller procedures and can operate while
+  the peripheral ACL is present.
+- The static Control Link advertising data has firmware lifetime, satisfying the
+  advertising module's retained-pointer contract.
+- Future BASS solicitation or custom-service discovery data must be composed into this
+  owned set. A second producer must not call `bt_mgmt_adv_start()` for index 0. Supporting
+  multiple advertising clients would require an explicit set allocator/composer and a
+  larger controller configuration.
+
+This permits both subsystems to use the same Bluetooth mechanisms without creating two
+owners for the same resource.
+
+### Advertising execution and lifecycle confirmation
+
+`bt_mgmt_adv_start()` submits work; a successful return means the request was admitted,
+not that the controller has started advertising. The advertising worker serializes the
+physical procedure and publishes one of two indexed completion events:
+
+- `BT_MGMT_EXT_ADV_STARTED` after the advertising set actually starts; or
+- `BT_MGMT_EXT_ADV_FAILED` with the procedure error if setup or start fails.
+
+Control Link keeps an internal advertising-start-pending flag and enters `ADVERTISING`
+only after receiving the matching started event for its set index. This avoids reporting a
+state, or making LED 1 blink, for an operation that is merely queued and may still fail.
+A peripheral connection is also accepted while start completion is pending because a fast
+peer may connect before the started event is dispatched. A later stale started event is
+ignored after the connection has moved Control Link to `CONNECTED`.
+
+Bluetooth Management no longer unconditionally restarts advertising after every successful
+peripheral disconnection. It publishes the physical disconnection and lets Control Link
+correlate it with its retained connection index. Only a matching Control Link disconnect
+requests the restart. Control Link remains `CONNECTED`, with LED 1 continuously on, while
+that restart is pending; it returns to `ADVERTISING` and blinking only after the new
+started event confirms success. Connection-establishment failures and directed-advertising
+timeouts remain generic advertising-procedure recovery inside Bluetooth Management.
+
+The current one-set, one-peer policy also prevents overlapping start, stop, and restart
+requests. `DISABLE_CONTROL` is accepted only after advertising is confirmed, and restart
+is requested only for the retained connection. If later features introduce concurrent
+advertising producers, the existing worker queue alone is not the ownership policy; an
+explicit arbiter must serialize set mutation, stop, deletion, and restart.
+
+### Event fan-out and race avoidance
+
+Bluetooth Management is the sole publisher of `bt_mgmt_chan`. It adds enough immutable
+metadata for consumers to filter events without claiming unrelated resources:
+
+- advertising events carry the advertising-set index;
+- ACL events carry the Zephyr connection index and whether the local role is peripheral;
+- PA events carry the periodic-sync and broadcast information needed by Audio Streaming.
+
+Fields are event-specific. Consumers switch on the event type before reading its payload;
+they must not inspect unused fields because some inherited PA and BASS publishers populate
+only the fields defined for their event.
+
+Control Link and Audio Streaming are separate Zbus message subscribers. Zbus therefore
+delivers an ordered copy to each subscriber instead of merely notifying both to reread one
+latest channel value. A rapid `CONNECTED`, `SECURITY_CHANGED`, `DISCONNECTED` sequence, or
+a burst of PA/audio events, cannot be collapsed into the last message for one consumer.
+Each subsystem filters the copied event family it owns and changes only its private state.
+
+The connection pointer in a Bluetooth Management message is borrowed callback context.
+Long-lived correlation uses the copied connection index; a future consumer that must keep
+the pointer beyond event handling must take and later release an explicit Bluetooth
+connection reference. This avoids retaining a stale callback-owned pointer after
+disconnection.
+
+The event path is bounded and nonblocking in Bluetooth callback and workqueue contexts.
+Publishing can still fail if the configured message-buffer pool is exhausted. New
+advertising-result paths log that failure, while some inherited callback paths currently
+escalate it through `ERR_CHK`. A unified overflow policy, completion deadlines, and bounded
+recovery for a missing advertising event remain future reliability guardrails. The current
+low-rate, one-peer lifecycle and prohibition on overlapping advertising producers keep the
+expected burst within the configured pool, but hardware stress testing must validate that
+assumption.
+
+The source-level API behavior, message fields, and extension constraints are summarized in
+[Bluetooth Management](../modules/bluetooth-management.md).
 
 ### Callback and thread flow
 
@@ -452,10 +555,10 @@ The intended request flow is:
 ATT callbacks never perform I2C, wait for Zbus, allocate an unbounded buffer, or decide
 device policy. The Control Link thread never calls the ADAU1787 driver directly.
 
-Connection, security, advertising, and disconnection events are ordered lifecycle events.
-Control Link consumes copied messages through a Zbus message subscriber so a
-`CONNECTED` to `SECURITY_CHANGED` to `DISCONNECTED` burst cannot collapse into one latest
-channel value.
+Connection, security, advertising, and disconnection events follow the shared ordered
+fan-out and filtering rules above. GATT request callbacks will use a separate bounded
+Control Link request queue because remote application requests have different payload,
+authorization, and response-correlation requirements.
 
 ### Internal message contracts
 
@@ -481,13 +584,14 @@ originated commands that can overlap, retry, or require an exact result.
 
 ### Device startup and failure policy
 
-On `START`, Device Controller should request shared Bluetooth readiness once, then start
-Codec Controller, Audio Streaming, and Control Link according to product policy. Control
-Link normally receives `ENABLE_CONTROL` and begins advertising, but it does not need a
-connected peer for Device Controller to reach `OPERATIONAL`. The existing codec and Audio
-Streaming readiness conditions remain the required PoC path; inability to advertise is a
-reported degraded capability unless the selected operating mode explicitly requires a
-remote peer.
+On `START`, Device Controller sends `ENABLE_CONTROL`, initializes Codec Controller, and
+starts Audio Streaming according to product policy. Control Link and Audio Streaming both
+call the shared idempotent initializer, so the supervisor does not need a separate
+Bluetooth-ready state or to depend on either subsystem's scheduling order. Control Link
+does not need a connected peer for Device Controller to reach `OPERATIONAL`. The existing
+codec and Audio Streaming readiness conditions remain the required PoC path; inability to
+advertise is a reported degraded capability unless the selected operating mode explicitly
+requires a remote peer.
 
 Control Link should be optional for audio operation. A failure to advertise or establish a
 remote session must not stop local audio or an already synchronized broadcast unless the
