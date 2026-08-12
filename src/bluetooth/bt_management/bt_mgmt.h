@@ -205,7 +205,9 @@ int bt_mgmt_pa_sync_delete(struct bt_le_per_adv_sync *pa_sync);
 int bt_mgmt_conn_disconnect(struct bt_conn *conn, uint8_t reason);
 
 /**
- * @brief	Initialize the Bluetooth management module.
+ * @brief	Initialize the Bluetooth management module once.
+ *
+ * Concurrent and repeated callers receive the result of the first initialization attempt.
  *
  * @return	0 if success, error otherwise.
  */

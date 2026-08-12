@@ -215,16 +215,20 @@ enum bt_mgmt_evt_type {
 	BT_MGMT_DISCONNECTED,
 	BT_MGMT_BROADCAST_SINK_DISABLE,
 	BT_MGMT_BROADCAST_CODE_RECEIVED,
+	BT_MGMT_EXT_ADV_STARTED,
+	BT_MGMT_EXT_ADV_FAILED,
 };
 
 struct bt_mgmt_msg {
 	enum bt_mgmt_evt_type event;
 	struct bt_conn *conn;
+	bool peripheral;
 	uint8_t index;
 	struct bt_le_ext_adv *ext_adv;
 	struct bt_le_per_adv_sync *pa_sync;
 	uint32_t broadcast_id;
 	uint8_t pa_sync_term_reason;
+	int error;
 };
 
 enum volume_evt_type {

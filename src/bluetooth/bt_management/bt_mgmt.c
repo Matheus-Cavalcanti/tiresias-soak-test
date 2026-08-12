@@ -6,6 +6,7 @@
 
 #include "bt_mgmt.h"
 
+#include <errno.h>
 #include <zephyr/zbus/zbus.h>
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/conn.h>
@@ -36,6 +37,25 @@ ZBUS_CHAN_DEFINE(bt_mgmt_chan, struct bt_mgmt_msg, NULL, NULL, ZBUS_OBSERVERS_EM
 #define BT_ENABLE_TIMEOUT_MS 100
 
 K_SEM_DEFINE(sem_bt_enabled, 0, 1);
+K_MUTEX_DEFINE(mtx_bt_mgmt_init);
+
+static bool bt_mgmt_init_attempted;
+static int bt_enable_result;
+static int bt_mgmt_init_result;
+
+static bool conn_is_peripheral(struct bt_conn *conn)
+{
+	struct bt_conn_info info;
+	int ret;
+
+	ret = bt_conn_get_info(conn, &info);
+	if (ret) {
+		LOG_WRN("Failed to get connection role for %p: %d", (void *)conn, ret);
+		return false;
+	}
+
+	return info.role == BT_CONN_ROLE_PERIPHERAL;
+}
 
 /**
  * @brief	Iterative function used to find connected conns
@@ -66,7 +86,7 @@ static void connected_cb(struct bt_conn *conn, uint8_t err)
 {
 	int ret;
 	char addr[BT_ADDR_LE_STR_LEN] = {0};
-	struct bt_mgmt_msg msg;
+	struct bt_mgmt_msg msg = {0};
 
 	if (err == BT_HCI_ERR_ADV_TIMEOUT && IS_ENABLED(CONFIG_BT_PERIPHERAL)) {
 		LOG_INF("Directed adv timed out with no connection, reverting to normal adv");
@@ -111,6 +131,8 @@ static void connected_cb(struct bt_conn *conn, uint8_t err)
 
 	msg.event = BT_MGMT_CONNECTED;
 	msg.conn = conn;
+	msg.peripheral = conn_is_peripheral(conn);
+	msg.index = bt_conn_index(conn);
 
 	ret = zbus_chan_pub(&bt_mgmt_chan, &msg, K_NO_WAIT);
 	ERR_CHK(ret);
@@ -129,7 +151,10 @@ static void disconnected_cb(struct bt_conn *conn, uint8_t reason)
 {
 	int ret;
 	char addr[BT_ADDR_LE_STR_LEN];
-	struct bt_mgmt_msg msg;
+	struct bt_mgmt_msg msg = {
+		.peripheral = conn_is_peripheral(conn),
+		.index = bt_conn_index(conn),
+	};
 
 	(void)bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
 
@@ -146,11 +171,6 @@ static void disconnected_cb(struct bt_conn *conn, uint8_t reason)
 
 	ret = zbus_chan_pub(&bt_mgmt_chan, &msg, K_NO_WAIT);
 	ERR_CHK(ret);
-
-	if (IS_ENABLED(CONFIG_BT_PERIPHERAL)) {
-		ret = bt_mgmt_adv_start(0, NULL, 0, NULL, 0, true);
-		ERR_CHK(ret);
-	}
 
 	/* The mutex for preventing the racing condition if two headset disconnected too close,
 	 * cause the disconnected_cb() triggered in short time leads to duplicate scanning
@@ -170,7 +190,10 @@ static void disconnected_cb(struct bt_conn *conn, uint8_t reason)
 static void security_changed_cb(struct bt_conn *conn, bt_security_t level, enum bt_security_err err)
 {
 	int ret;
-	struct bt_mgmt_msg msg;
+	struct bt_mgmt_msg msg = {
+		.peripheral = conn_is_peripheral(conn),
+		.index = bt_conn_index(conn),
+	};
 
 	if (err) {
 		LOG_WRN("Security failed: level %d err %d %s", level, err,
@@ -201,9 +224,10 @@ static struct bt_conn_cb conn_callbacks = {
 
 static void bt_enabled_cb(int err)
 {
+	bt_enable_result = err;
+
 	if (err) {
 		LOG_ERR("Bluetooth init failed (err code: %d)", err);
-		ERR_CHK(err);
 	}
 
 	k_sem_give(&sem_bt_enabled);
@@ -333,19 +357,26 @@ int bt_mgmt_conn_disconnect(struct bt_conn *conn, uint8_t reason)
 	return 0;
 }
 
-int bt_mgmt_init(void)
+static int bt_mgmt_init_once(void)
 {
 	int ret;
 
+	bt_enable_result = 0;
 	ret = bt_enable(bt_enabled_cb);
-	if (ret) {
+	if (ret == -EALREADY) {
+		LOG_DBG("Bluetooth was already initialized");
+	} else if (ret) {
 		return ret;
-	}
+	} else {
+		ret = k_sem_take(&sem_bt_enabled, K_MSEC(BT_ENABLE_TIMEOUT_MS));
+		if (ret) {
+			LOG_ERR("bt_enable timed out");
+			return ret;
+		}
 
-	ret = k_sem_take(&sem_bt_enabled, K_MSEC(BT_ENABLE_TIMEOUT_MS));
-	if (ret) {
-		LOG_ERR("bt_enable timed out");
-		return ret;
+		if (bt_enable_result) {
+			return bt_enable_result;
+		}
 	}
 
 	if (IS_ENABLED(CONFIG_TESTING_BLE_ADDRESS_RANDOM)) {
@@ -412,4 +443,24 @@ int bt_mgmt_init(void)
 	}
 
 	return 0;
+}
+
+int bt_mgmt_init(void)
+{
+	int ret;
+
+	k_mutex_lock(&mtx_bt_mgmt_init, K_FOREVER);
+
+	if (bt_mgmt_init_attempted) {
+		k_mutex_unlock(&mtx_bt_mgmt_init);
+		return bt_mgmt_init_result;
+	}
+
+	bt_mgmt_init_result = bt_mgmt_init_once();
+	bt_mgmt_init_attempted = true;
+	ret = bt_mgmt_init_result;
+
+	k_mutex_unlock(&mtx_bt_mgmt_init);
+
+	return ret;
 }

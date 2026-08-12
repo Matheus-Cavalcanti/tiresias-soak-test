@@ -230,7 +230,7 @@ static int extended_adv_create(uint8_t ext_adv_index)
 static void advertising_process(struct k_work *work)
 {
 	int ret;
-	struct bt_mgmt_msg msg;
+	struct bt_mgmt_msg msg = {0};
 	uint8_t ext_adv_index;
 
 	ret = k_msgq_get(&adv_queue, &ext_adv_index, K_NO_WAIT);
@@ -248,7 +248,7 @@ static void advertising_process(struct k_work *work)
 			ret = bt_le_filter_accept_list_clear();
 			if (ret) {
 				LOG_ERR("Failed to clear filter accept list");
-				return;
+				goto advertising_failed;
 			}
 
 			bt_foreach_bond(BT_ID_DEFAULT, filter_accept_list_add, NULL);
@@ -261,7 +261,7 @@ static void advertising_process(struct k_work *work)
 		ret = direct_adv_create(ext_adv_index, addr);
 		if (ret) {
 			LOG_WRN("Failed to create direct advertisement: %d", ret);
-			return;
+			goto advertising_failed;
 		}
 
 		ret = bt_le_ext_adv_start(
@@ -271,7 +271,7 @@ static void advertising_process(struct k_work *work)
 		ret = extended_adv_create(ext_adv_index);
 		if (ret) {
 			LOG_WRN("Failed to create extended advertisement: %d", ret);
-			return;
+			goto advertising_failed;
 		}
 
 		dir_adv_timed_out = false;
@@ -280,7 +280,7 @@ static void advertising_process(struct k_work *work)
 
 	if (ret) {
 		LOG_ERR("Failed to start advertising set. Err: %d", ret);
-		return;
+		goto advertising_failed;
 	}
 
 	if (per_adv_local[ext_adv_index] != NULL && IS_ENABLED(CONFIG_BT_PER_ADV)) {
@@ -288,7 +288,7 @@ static void advertising_process(struct k_work *work)
 		ret = bt_le_per_adv_start(ext_adv[ext_adv_index]);
 		if (ret) {
 			LOG_ERR("Failed to enable periodic advertising: %d", ret);
-			return;
+			goto advertising_failed;
 		}
 
 		msg.event = BT_MGMT_EXT_ADV_WITH_PA_READY;
@@ -299,8 +299,33 @@ static void advertising_process(struct k_work *work)
 		ERR_CHK(ret);
 	}
 
+	msg = (struct bt_mgmt_msg){
+		.event = BT_MGMT_EXT_ADV_STARTED,
+		.index = ext_adv_index,
+		.ext_adv = ext_adv[ext_adv_index],
+	};
+
+	ret = zbus_chan_pub(&bt_mgmt_chan, &msg, K_NO_WAIT);
+	if (ret) {
+		LOG_ERR("Failed to publish advertising started event: %d", ret);
+	}
+
 	/* NOTE: The string below is used by the Nordic CI system */
 	LOG_INF("Advertising successfully started");
+	return;
+
+advertising_failed:
+	msg = (struct bt_mgmt_msg){
+		.event = BT_MGMT_EXT_ADV_FAILED,
+		.index = ext_adv_index,
+		.ext_adv = ext_adv[ext_adv_index],
+		.error = ret,
+	};
+
+	ret = zbus_chan_pub(&bt_mgmt_chan, &msg, K_NO_WAIT);
+	if (ret) {
+		LOG_ERR("Failed to publish advertising failure: %d", ret);
+	}
 }
 
 void bt_mgmt_dir_adv_timed_out(uint8_t ext_adv_index)
