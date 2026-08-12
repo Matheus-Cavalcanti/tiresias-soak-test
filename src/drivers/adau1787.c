@@ -18,6 +18,10 @@
 
 LOG_MODULE_REGISTER(adau1787_driver, LOG_LEVEL_INF);
 
+/* Two complete audio frames at 16 kHz. */
+#define ADAU1787_SAFELOAD_DELAY_US 125U
+BUILD_ASSERT(PARAM_ADDR_IC_1_Sigma == 0x2000, "Param Memory Address must be 0x2000.");
+
 /** @brief Device Tree Specification for ADAU1787 */
 #define ADAU1787_NODE DT_NODELABEL(adau_1787)
 
@@ -292,8 +296,8 @@ int adau1787_safeload_write(sub_addr_t target_addr, uint8_t* data, size_t num_wo
     return ret;
   }
 
-  /* Do not overwrite the safeload slots before the next 48 kHz audio frame. */
-  k_usleep(21);
+  /* Do not overwrite the safeload slots until the triggered transfer has completed. */
+  k_usleep(ADAU1787_SAFELOAD_DELAY_US);
 
   return 0;
 }
