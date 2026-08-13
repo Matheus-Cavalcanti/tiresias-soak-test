@@ -769,7 +769,7 @@ ADI_REG_TYPE Program_Data_IC_1_Sigma[PROGRAM_SIZE_IC_1_Sigma] = {
 
 /* DSP Parameter (Coefficient) Data */
 #define PARAM_SIZE_IC_1_Sigma 2168
-#define PARAM_ADDR_IC_1_Sigma 0
+#define PARAM_ADDR_IC_1_Sigma 0x2000
 ADI_REG_TYPE Param_Data_IC_1_Sigma[PARAM_SIZE_IC_1_Sigma] = {
 0x00, 0x00, 0x07, 0xFE, 
 0x00, 0x00, 0x00, 0x00, 
