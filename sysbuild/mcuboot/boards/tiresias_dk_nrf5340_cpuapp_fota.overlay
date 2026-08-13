@@ -1,5 +1,5 @@
 / {
-  chosen {
-    nordic,pm-ext-flash = &mx25r16;
+	chosen {
+		nordic,pm-ext-flash = &mx25r16;
 	};
 };
