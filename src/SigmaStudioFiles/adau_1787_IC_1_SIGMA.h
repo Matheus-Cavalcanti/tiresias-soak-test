@@ -1,7 +1,7 @@
 /*
  * File:           C:\users\crossover\Desktop\exports\adau_1787_IC_1_SIGMA.h
  *
- * Created:        Wednesday, August 12, 2026 5:16:02 PM
+ * Created:        Thursday, August 13, 2026 2:03:29 PM
  * Description:    adau_1787:IC 1-Sigma program data.
  *
  * This software is distributed in the hope that it will be useful,
@@ -769,7 +769,7 @@ ADI_REG_TYPE Program_Data_IC_1_Sigma[PROGRAM_SIZE_IC_1_Sigma] = {
 
 /* DSP Parameter (Coefficient) Data */
 #define PARAM_SIZE_IC_1_Sigma 2168
-#define PARAM_ADDR_IC_1_Sigma 0x2000
+#define PARAM_ADDR_IC_1_Sigma 0
 ADI_REG_TYPE Param_Data_IC_1_Sigma[PARAM_SIZE_IC_1_Sigma] = {
 0x00, 0x00, 0x07, 0xFE, 
 0x00, 0x00, 0x00, 0x00, 

@@ -3776,7 +3776,7 @@
             </Algorithm>
         </Module>
         <Module>
-            <CellName>I2S Volume</CellName>
+            <CellName>Main Volume</CellName>
             <Algorithm>
                 <AlgoName>ALG0</AlgoName>
                 <DetailedName>GainS200AlgGrowDBStepUnstSubroutine1</DetailedName>

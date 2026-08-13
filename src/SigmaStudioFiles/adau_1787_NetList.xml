@@ -185,7 +185,7 @@
                 <Link pin="I_C716_A0_P3_in" dir="in" link="Link31" />
                 <Link pin="O_C716_A0_P1_out" dir="out" link="Link32" />
             </Algorithm>
-            <Algorithm name="GainS200AlgGrowDBStepUnstSubroutine1" friendlyname="Gain (DB Compact) - Growable - Optimized " cell="I2S Volume " location="{X=488, Y=83} " Growth="2 " GrowthB="0">
+            <Algorithm name="GainS200AlgGrowDBStepUnstSubroutine1" friendlyname="Gain (DB Compact) - Growable - Optimized " cell="Main Volume " location="{X=488, Y=83} " Growth="2 " GrowthB="0">
                 <Link pin="I_C26_A0_P1_in" dir="in" link="Link32" />
                 <Link pin="I_C26_A0_P3_in" dir="in" link="Link26" />
                 <Link pin="O_C26_A0_P2_out" dir="out" link="Link25" />

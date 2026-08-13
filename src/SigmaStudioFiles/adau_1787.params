@@ -2531,7 +2531,7 @@ Parameter Data :
 
 
 
-Cell Name         = I2S Volume
+Cell Name         = Main Volume
 Parameter Name    = targetGainS200AlgGrowDBStepUnstSubroutine1
 Parameter Address = 10348
 Parameter Value   = 0.100000023841858
@@ -2540,7 +2540,7 @@ Parameter Data :
 
 
 
-Cell Name         = I2S Volume
+Cell Name         = Main Volume
 Parameter Name    = GainS200AlgGrowDBStepUnstSubroutine1coeff_adr
 Parameter Address = 10344
 Parameter Value   = 2587
@@ -2549,7 +2549,7 @@ Parameter Data :
 
 
 
-Cell Name         = I2S Volume
+Cell Name         = Main Volume
 Parameter Name    = GainS200AlgGrowDBStepUnstSubroutine1data_adr
 Parameter Address = 10340
 Parameter Value   = 480
@@ -2558,7 +2558,7 @@ Parameter Data :
 
 
 
-Cell Name         = I2S Volume
+Cell Name         = Main Volume
 Parameter Name    = approx_factorGainS200AlgGrowDBStepUnstSubroutine1
 Parameter Address = 10352
 Parameter Value   = 0.00048828125
