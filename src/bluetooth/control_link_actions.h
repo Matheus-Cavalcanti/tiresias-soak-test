@@ -7,4 +7,11 @@
 #ifndef CONTROL_LINK_ACTIONS_H
 #define CONTROL_LINK_ACTIONS_H
 
+#include "zbus_common.h"
+
+int control_link_actions_enable(void);
+int control_link_actions_restart_advertising(void);
+int control_link_actions_disable(void);
+int control_link_actions_set_indicator(control_link_state state);
+
 #endif /* CONTROL_LINK_ACTIONS_H */

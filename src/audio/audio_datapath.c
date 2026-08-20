@@ -90,7 +90,7 @@ LOG_MODULE_REGISTER(audio_datapath, CONFIG_AUDIO_DATAPATH_LOG_LEVEL);
 
 /* How often to print under-run warning */
 #define UNDERRUN_LOG_INTERVAL_BLKS 5000
-#define I2S_LOG_INTERVAL_BLKS 1000
+#define I2S_LOG_INTERVAL_BLKS 10000
 
 enum drift_comp_state {
   DRIFT_STATE_INIT, /* Waiting for data to be received */

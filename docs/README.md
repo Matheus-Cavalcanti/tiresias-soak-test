@@ -13,6 +13,9 @@ structured that way, without becoming source-level API references.
   and the current proof-of-concept environment.
 - [Firmware control plane](architecture/control-plane.md): subsystem naming,
   state-machine ownership, and coordination.
+- [Control Link and remote management](architecture/control-link.md): custom BLE
+  service, discoverable codec parameter catalog, security, system integration, and future
+  Auracast Broadcast Assistant support.
 - [Threads and execution contexts](architecture/threads-and-contexts.md): control-plane
   threads, callback boundaries, data-plane workers, and implementation status.
 - [Zbus channels](architecture/zbus.md): private-state mirroring, control-plane publishers,
@@ -35,6 +38,9 @@ Module documents describe implementation-level responsibilities, public APIs,
 configuration requirements, and message contracts.
 
 - [Button Input subsystem](modules/button.md): button GPIO handling and Zbus events.
+- [Bluetooth Management](modules/bluetooth-management.md): shared Bluetooth initialization,
+  advertising execution, physical event fan-out, and Control Link/Audio Streaming
+  concurrency rules.
 - [ADAU1787 startup](modules/adau1787-startup.md): codec reset, I2C programming,
   SigmaStudio download, I2S activation, status checks, and failure behavior.
 - [LED Indicator subsystem](modules/led.md): LED commands, GPIO handling, and blink behavior.

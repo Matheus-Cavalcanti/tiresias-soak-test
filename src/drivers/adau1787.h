@@ -28,23 +28,6 @@
 #define ADAU1787_PARAM_RAM_BASE 0x2000
 /** @brief SigmaDSP parameter RAM end in the external control-port address map */
 #define ADAU1787_PARAM_RAM_END 0x3FFF
-/** @brief Maximum number of parameter words supported by one safeload operation */
-#define ADAU1787_SAFELOAD_MAX_WORDS 5
-
-/** @brief External control-port address for Safeload Data 1 */
-#define SAFELOAD_DATA_1 0x2004
-/** @brief External control-port address for Safeload Data 2 */
-#define SAFELOAD_DATA_2 0x2008
-/** @brief External control-port address for Safeload Data 3 */
-#define SAFELOAD_DATA_3 0x200C
-/** @brief External control-port address for Safeload Data 4 */
-#define SAFELOAD_DATA_4 0x2010
-/** @brief External control-port address for Safeload Data 5 */
-#define SAFELOAD_DATA_5 0x2014
-/** @brief External control-port address for the safeload target parameter */
-#define SAFELOAD_TARGET_ADDR 0x2018
-/** @brief External control-port address for the safeload word count and trigger */
-#define SAFELOAD_NUM_WORDS 0x201C
 
 /** @brief ADC, DAC, Headphone Power Controls Register Address */
 #define ADC_DAC_HP_PWR REG_ADC_DAC_HP_PWR_IC_1_Sigma_ADDR
@@ -130,8 +113,9 @@ int adau1787_write_register(sub_addr_t reg_addr, reg_word_t* data);
  * updated. Once the safeload write is triggered, the DSP core safely
  * transfers the data during the next available audio frame.
  *
- * @param target_addr External control-port byte address of the first parameter
- *                    word to update, such as a generated MOD_*_ADDR value.
+ * @param target_addr SigmaStudio-generated address of the first parameter word
+ *                    to update. This address is written to the safeload target
+ *                    field without conversion.
  * @param data Pointer to the buffer containing big-endian 32-bit SigmaDSP
  *             parameter words.
  * @param num_words Number of 32-bit words to be written (maximum 5).

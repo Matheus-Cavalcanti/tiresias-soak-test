@@ -9,12 +9,38 @@
 #include "adau1787.h"
 #include "adau_1787_IC_1_SIGMA_PARAM.h"
 
+#include <stdbool.h>
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(hw_codec, CONFIG_MODULE_HW_CODEC_LOG_LEVEL);
 
-#define LISTENING_MODE_SWITCH_ADDRESS MOD_TROCA_STEREOSWSLEW_ADDR
+#define LISTENING_MODE_SWITCH_ADDRESS MOD_SOURCESELECT_STEREOSWSLEW_ADDR
 #define LISTENING_MODE_I2S 0U
 #define LISTENING_MODE_LOCAL 1U
+
+static int set_dac_mute(bool mute)
+{
+  reg_word_t dac_ctrl2;
+  int ret;
+
+  ret = adau1787_read_register(REG_DAC_CTRL2_IC_1_Sigma_ADDR, &dac_ctrl2);
+  if (ret != 0) {
+    LOG_ERR("Failed to read DAC mute controls: %d", ret);
+    return ret;
+  }
+
+  if (mute) {
+    dac_ctrl2 |= R56_DAC0_MUTE_IC_1_Sigma_MASK | R56_DAC1_MUTE_IC_1_Sigma_MASK;
+  } else {
+    dac_ctrl2 &= ~(R56_DAC0_MUTE_IC_1_Sigma_MASK | R56_DAC1_MUTE_IC_1_Sigma_MASK);
+  }
+
+  ret = adau1787_write_register(REG_DAC_CTRL2_IC_1_Sigma_ADDR, &dac_ctrl2);
+  if (ret != 0) {
+    LOG_ERR("Failed to %s DAC outputs: %d", mute ? "mute" : "unmute", ret);
+  }
+
+  return ret;
+}
 
 static int select_listening_mode(uint32_t mode)
 {
@@ -26,7 +52,7 @@ static int select_listening_mode(uint32_t mode)
   };
   int ret;
 
-  ret = adau1787_write(LISTENING_MODE_SWITCH_ADDRESS, codec_param, sizeof(codec_param));
+  ret = adau1787_safeload_write(LISTENING_MODE_SWITCH_ADDRESS, codec_param, 1U);
   if (ret != 0) {
     LOG_ERR("Failed to select listening mode %u at 0x%04X: %d", mode, LISTENING_MODE_SWITCH_ADDRESS, ret);
   }
@@ -60,12 +86,12 @@ int hw_codec_volume_increase(void)
 
 int hw_codec_volume_mute(void)
 {
-  return 0;
+  return set_dac_mute(true);
 }
 
 int hw_codec_volume_unmute(void)
 {
-  return 0;
+  return set_dac_mute(false);
 }
 
 int hw_codec_default_conf_enable(void)

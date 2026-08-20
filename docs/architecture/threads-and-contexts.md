@@ -51,7 +51,7 @@ flowchart TB
     main -->|"commands"| codec
     main -->|"commands"| control
     main -->|"commands"| streaming
-    board -->|"boot indication"| led
+    control -->|"Control Link indication"| led
     codec -->|"presentation indications"| led
 
     streaming -->|"start/stop data reception"| rx
@@ -101,30 +101,40 @@ the private state machine, and publishes state or result messages after processi
 
 ### Control Link thread
 
-The Control Link subsystem retains a dedicated thread. At the initial stage it owns
-connectable advertising and the BLE control connection. A future custom GATT service will
-also receive remote codec-configuration requests.
+The Control Link subsystem retains a dedicated thread. It owns the remote-management
+session, protocol state, authorization, and request routing. The shared Bluetooth
+Management module performs one-time stack initialization and physical advertising and
+connection procedures; Control Link owns the policy that requests their availability. The
+custom GATT service receives remote device and codec-configuration requests.
 
-Bluetooth callbacks must not perform codec operations. A callback validates and copies the
-request into an owned queue or message, wakes the Control Link thread, and returns. The
-Control Link thread can then parse the request, apply connection and authorization policy,
-forward a semantic command to the appropriate owner, and send the remote response. The
-initial implementation serializes this flow without explicit command correlation;
-correlation identifiers may be introduced when remote requests can overlap.
+Control Link and Audio Streaming may both enter the shared Bluetooth initializer. A mutex
+serializes the first attempt and all later callers receive its cached result, so neither
+thread owns initialization and correctness does not depend on which thread runs first.
+Their Bluetooth events are delivered through separate ordered message-subscriber FIFOs;
+each thread filters the event families and resource indexes it owns.
+
+Bluetooth callbacks must not perform codec operations. A callback validates the minimum
+framing, copies the request into an owned bounded queue, wakes the Control Link thread, and
+returns. The Control Link thread parses the request, applies connection and authorization
+policy, forwards a semantic command to the appropriate owner, and later sends the
+correlated remote response. Transaction identifiers and bounded pending-operation storage
+are required from the first modifying remote operation; an external client cannot rely on
+the optimistic internal command-progress model.
 
 Keeping this work separate prevents a burst of GATT operations from delaying PA or BIS
 lifecycle events in the Audio Streaming subsystem.
 
-The final routing policy for remote codec requests remains to be defined:
+Device-wide policy, such as changing audible presentation, is coordinated by the Device
+Controller subsystem. Cataloged codec parameter operations use a dedicated queued request
+and result port to the Codec Controller subsystem. In both cases, the behavior owner
+performs final state and value validation. Codec Controller remains the only subsystem
+that performs I2C access. V1 parameter values use ordered bounded messages; future bulk
+transfers add a fixed buffer pool. Neither uses a latest-value Zbus channel.
 
-- device-wide policy, such as changing the audible presentation mode, should be coordinated
-  by the Device Controller subsystem; and
-- codec-owned parameter updates may be sent directly to the Codec Controller subsystem if
-  the Zbus contract explicitly authorizes the Control Link subsystem as a publisher.
-
-In both cases, the Codec Controller remains the only subsystem that validates codec state
-and performs I2C access. Burstable parameter requests require a queued transport rather
-than a latest-value Zbus channel.
+The Control Link event loop records outstanding asynchronous work rather than blocking for
+Codec Controller completion. This allows it to process disconnect, timeout, authorization,
+and Bluetooth backpressure events while a codec transaction is active. The detailed
+service and transfer design is in [control-link.md](control-link.md).
 
 ### Audio Streaming thread
 
@@ -257,8 +267,8 @@ are excluded from the application target.
 |---|---|
 | Main thread | Runs the Device Controller subscriber loop. |
 | Codec Controller thread | Owns ADAU1787 initialization, mode selection, state, and presentation indication. |
-| Control Link thread | Present but intentionally left as pseudocode until connectable BLE and GATT control are implemented. |
-| Audio Streaming thread | Owns Bluetooth initialization and the broadcast discovery, synchronization, and recovery lifecycle. |
+| Control Link thread | Owns connectable-advertising policy, ACL lifecycle state, and LED 1 indication; the custom service and request flow remain specified in [control-link.md](control-link.md). |
+| Audio Streaming thread | Uses shared Bluetooth Management and owns broadcast discovery, synchronization, and recovery policy. |
 | Legacy `controller`, `audio_control`, and `bluetooth` sources | Retained only as reference and excluded from the application target. |
 | Audio datapath and encoder threads | Retain as data-plane workers. |
 | Button publication and LED workers | Retain unless a measured reason favors an equivalent work-queue design. |

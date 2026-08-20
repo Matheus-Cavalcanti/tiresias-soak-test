@@ -115,6 +115,12 @@ static void handle_state_off(const struct zbus_channel* channel)
     return;
   }
 
+  ret = publish_control_link_command(CONTROL_LINK_CMD_ENABLE_CONTROL);
+  if (ret != 0) {
+    /* Control availability must not prevent independent broadcast reception. */
+    LOG_ERR("Failed to request Control Link initialization: %d", ret);
+  }
+
   ret = publish_codec_controller_command(CODEC_CONTROLLER_CMD_INITIALIZE);
   if (ret != 0) {
     LOG_ERR("Failed to request codec initialization: %d", ret);

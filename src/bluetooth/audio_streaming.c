@@ -54,6 +54,8 @@ static int set_state(audio_streaming_state state)
   audio_streaming_state_chan_msg msg = {
     .state = state,
   };
+  int indicator_ret;
+  int ret;
 
   if (current_state == state) {
     return 0;
@@ -62,7 +64,14 @@ static int set_state(audio_streaming_state state)
   LOG_INF("State transition: %d -> %d", current_state, state);
   current_state = state;
 
-  return zbus_chan_pub(&audio_streaming_state_chan, &msg, K_MSEC(AUDIO_STREAMING_ZBUS_TIMEOUT_MS));
+  ret = zbus_chan_pub(&audio_streaming_state_chan, &msg, K_MSEC(AUDIO_STREAMING_ZBUS_TIMEOUT_MS));
+
+  indicator_ret = audio_streaming_actions_set_indicator(state);
+  if (indicator_ret != 0) {
+    LOG_ERR("Failed to update Audio Streaming indicator: %d", indicator_ret);
+  }
+
+  return ret;
 }
 
 /* === Helper Functions === */

@@ -7,6 +7,8 @@
 #ifndef AUDIO_STREAMING_ACTIONS_H
 #define AUDIO_STREAMING_ACTIONS_H
 
+#include "zbus_common.h"
+
 #include <stdint.h>
 
 struct bt_le_per_adv_sync;
@@ -21,5 +23,6 @@ int audio_streaming_actions_restart_scan(void);
 int audio_streaming_actions_restart_after_sync_loss(struct bt_le_per_adv_sync* pa_sync);
 int audio_streaming_actions_restart_after_stream_stop(void);
 int audio_streaming_actions_stop(void);
+int audio_streaming_actions_set_indicator(audio_streaming_state state);
 
 #endif /* AUDIO_STREAMING_ACTIONS_H */

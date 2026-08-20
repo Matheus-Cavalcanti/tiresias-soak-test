@@ -158,48 +158,6 @@ typedef struct audio_streaming_result_chan_msg {
   int error;
 } audio_streaming_result_chan_msg;
 
-/* === Legacy Bluetooth service (excluded from the application target) === */
-typedef enum bt_cmd {
-	BT_CMD_INIT,
-} bt_cmd;
-
-typedef enum bt_state {
-	BT_STATE_OFF,
-	BT_STATE_INITIALIZING,
-	BT_STATE_READY,
-	BT_STATE_ERROR,
-} bt_state;
-
-typedef struct bt_cmd_chan_msg {
-	enum bt_cmd cmd;
-} bt_cmd_chan_msg;
-
-typedef struct bt_state_chan_msg {
-	enum bt_state state;
-} bt_state_chan_msg;
-
-/* === Legacy audio control service (excluded from the application target) === */
-typedef enum audio_cmd {
-	AUDIO_CMD_INIT,
-	AUDIO_CMD_CODEC_SWITCH,
-} audio_cmd;
-
-typedef enum audio_state {
-	AUDIO_STATE_OFF,
-	AUDIO_STATE_INITIALIZING,
-	AUDIO_STATE_STANDARD,
-	AUDIO_STATE_BROADCAST_STREAMING,
-	AUDIO_STATE_ERROR,
-} audio_state;
-
-typedef struct audio_cmd_chan_msg {
-	enum audio_cmd cmd;
-} audio_cmd_chan_msg;
-
-typedef struct audio_state_chan_msg {
-	enum audio_state state;
-} audio_state_chan_msg;
-
 /* === LED === */
 typedef enum board_led_t {
   LED_1,
@@ -257,16 +215,20 @@ enum bt_mgmt_evt_type {
 	BT_MGMT_DISCONNECTED,
 	BT_MGMT_BROADCAST_SINK_DISABLE,
 	BT_MGMT_BROADCAST_CODE_RECEIVED,
+	BT_MGMT_EXT_ADV_STARTED,
+	BT_MGMT_EXT_ADV_FAILED,
 };
 
 struct bt_mgmt_msg {
 	enum bt_mgmt_evt_type event;
 	struct bt_conn *conn;
+	bool peripheral;
 	uint8_t index;
 	struct bt_le_ext_adv *ext_adv;
 	struct bt_le_per_adv_sync *pa_sync;
 	uint32_t broadcast_id;
 	uint8_t pa_sync_term_reason;
+	int error;
 };
 
 enum volume_evt_type {

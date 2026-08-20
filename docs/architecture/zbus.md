@@ -40,6 +40,9 @@ remain in the data plane and must not be transported through these channels.
   subsystem responsible for its internal stop and cleanup sequence.
 - If commands or events later need burst delivery, their payloads must use a queued
   delivery mechanism rather than relying on a channel's latest value.
+- Externally originated modifying requests require correlation and exact terminal results
+  from their first implementation. They must not inherit the initial PoC's optimistic
+  no-correlation shortcut merely because an internal lifecycle command uses it.
 
 ### Future reliability guardrails
 
@@ -78,8 +81,9 @@ Messages published on this channel request changes to the board's LED indication
 
 ### Publishers
 
-- Board initialization publishes the boot indication on `LED_1`.
-- The Codec Controller subsystem publishes indications for its own presentation state.
+- The Control Link subsystem is the sole publisher for `LED_1`: blinking means
+  advertising, continuously on means connected, and off means disabled or error.
+- The Codec Controller subsystem publishes its presentation indication on `LED_2`.
 - Additional publishers require an explicit indication-ownership or priority policy to
   prevent different subsystems from issuing conflicting LED commands.
 
@@ -184,6 +188,11 @@ subsystem's private state remains authoritative. This channel describes the BLE 
 used by the phone or workstation for control and does not represent broadcast
 synchronization.
 
+The target states are `DISABLED`, `ADVERTISING`, `LINKED`, `READY`, and `ERROR`.
+`LINKED` represents an ACL without an authorized vendor-protocol session; `READY`
+represents a secure and authorized Tiresias session. The current read-only DIS foundation
+uses `CONNECTED` for the physical ACL and must be refined before custom writes are added.
+
 ### Subscribers and listeners
 
 - The Device Controller subsystem may subscribe when Control Link behavior is implemented.
@@ -195,10 +204,10 @@ synchronization.
 
 ## Control Link event
 
-Messages on this channel carry Control Link command outcomes that do not cause a state
-transition. Normalized requests received through GATT are published on the Device
-Controller command channel. Bluetooth callbacks publish or enqueue semantic events; they
-do not directly change another subsystem's state.
+Messages on this channel may carry low-rate Control Link lifecycle outcomes that do not
+cause a state transition. It is not the transport for arbitrary remote commands, codec
+parameter chunks, or remote responses. Bluetooth callbacks publish or enqueue semantic
+events; they do not directly change another subsystem's state.
 
 ### Subscribers and listeners
 
@@ -207,6 +216,29 @@ do not directly change another subsystem's state.
 ### Publishers
 
 - Control Link will be the sole publisher when its behavior is implemented.
+
+## Remote request and result queues
+
+GATT requests originate outside the firmware and may overlap, retry, carry transaction
+identifiers, and require exact errors. The Control Link implementation therefore needs
+bounded ordered queues rather than a latest-value public Zbus command channel.
+
+- A GATT callback copies an admitted request to the Control Link inbound queue and returns.
+- Control Link routes device-wide policy to a correlated Device Controller request/result
+  contract.
+- Control Link routes cataloged parameter operations to a dedicated Codec Controller
+  request/result contract.
+- Result messages preserve the remote transaction identifier and distinguish accepted,
+  rejected, completed, failed, timed out, cancelled, and partially applied outcomes as
+  appropriate.
+- An outbound queue isolates the owning subsystem from GATT indication and notification
+  backpressure.
+
+V1 descriptors and bounded single-parameter values may use message queues or Zbus message
+subscribers. Future bulk parameter payloads use a fixed buffer pool with explicit
+ownership. Neither may be embedded in a latest-value channel or referenced through
+callback-owned pointers. The complete remote protocol and codec transfer model is in
+[control-link.md](control-link.md).
 
 ## Audio Streaming command
 
@@ -260,8 +292,36 @@ not produce a durable Audio Streaming state transition.
 - Audio Streaming will be the sole publisher when result reporting is implemented.
 
 Raw Bluetooth-management and LE Audio callback channels remain internal implementation
-details of the Control Link and Audio Streaming subsystems. Audio Streaming consumes them
-with a Zbus message subscriber so every published lifecycle payload is copied and delivered
-in order; a normal subscriber that rereads only the latest channel value is not sufficient
-for the `CONFIG_RECEIVED` to `STREAMING` sequence. Public control-plane subsystems should
-depend on the semantic contracts above rather than on stack-specific events or pointers.
+details of the Control Link and Audio Streaming subsystems. Both subsystems must consume
+ordered copied lifecycle messages. Both now use Zbus message subscribers; a normal
+subscriber that rereads only the latest channel value is not sufficient for either the
+`CONNECTED` to `SECURITY_CHANGED` to `DISCONNECTED` sequence or the `CONFIG_RECEIVED` to
+`STREAMING` sequence. Public control-plane subsystems should depend on the semantic
+contracts above rather than on stack-specific events or pointers.
+
+Bluetooth Management is the sole publisher of `bt_mgmt_chan`. Advertising completion and
+failure events carry the advertising-set index; ACL lifecycle events carry the connection
+index and local role. This lets Control Link accept only its peripheral ACL and advertising
+set while Audio Streaming independently handles PA and broadcast events from the same
+ordered internal fan-out.
+
+The channel does not grant ownership merely because a subsystem receives every event.
+Consumers apply the following filters:
+
+| Consumer | Accepted Bluetooth Management events |
+|---|---|
+| Control Link | Start/failure for advertising set 0 and connection/disconnection for its peripheral connection index; security is reserved for the later authorized session. |
+| Audio Streaming | PA synchronization/loss and other broadcast-reception events. |
+
+Both observers are message subscribers, so each receives its own ordered copy. They do not
+compete for one queue entry, and one cannot consume an event before the other sees it.
+Borrowed pointer fields are valid only under their Bluetooth lifetime rules; Control Link
+uses copied scalar indexes for persistent correlation.
+
+The advertising completion events are necessary because `bt_mgmt_adv_start()` queues work.
+Its synchronous return reports admission only. `BT_MGMT_EXT_ADV_STARTED` confirms the
+physical procedure, while `BT_MGMT_EXT_ADV_FAILED` carries its asynchronous error. A
+subsystem must not publish an advertising semantic state based only on admission.
+
+See [Bluetooth Management](../modules/bluetooth-management.md) for initialization,
+resource-ownership, and concurrency details.

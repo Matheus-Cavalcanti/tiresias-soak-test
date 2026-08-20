@@ -67,7 +67,7 @@ The four stateful subsystems answer independent semantic questions:
 | Stateful subsystem | Semantic question it answers |
 |---|---|
 | Device Controller | Is the device starting, operational, conserving power, or in a fatal fault? |
-| Control Link | Can the phone or workstation exchange control information with the device? |
+| Control Link | What is the availability of the incoming BLE link and an authorized Tiresias control session? |
 | Audio Streaming | What is the device's synchronization relationship with an LE Audio broadcaster? |
 | Codec Controller | What is the ADAU1787's operational condition, and what audio is it presenting? |
 
@@ -75,6 +75,13 @@ Each stateful subsystem changes only its own state. It requests work from anothe
 using a command and receives completion, state, or fault events in response. The Device
 Controller subsystem coordinates system-wide policy but does not directly manipulate codec
 registers, Bluetooth procedures, or audio buffers.
+
+Bluetooth Management is a shared mechanism module rather than another semantic subsystem.
+Control Link and Audio Streaming may both request the Bluetooth capabilities they own,
+while mutex-protected one-time initialization, indexed resources, and ordered copied event
+fan-out prevent them from duplicating global setup or consuming one another's events. The
+detailed contract is documented in
+[Bluetooth Management](../modules/bluetooth-management.md).
 
 ### State-centric model
 
@@ -182,43 +189,58 @@ power-off, wake, and recovery transitions remain reserved by the model.
 
 ### Why it exists
 
-The Control Link subsystem owns the bidirectional BLE connection to the companion
-application or research workstation. It is independent of the Audio Streaming subsystem
-and can connect, disconnect, or fail without changing broadcast synchronization state.
+The Control Link subsystem owns the bidirectional BLE remote-management session with the
+companion application or research workstation. It is independent of the Audio Streaming
+subsystem and can connect, disconnect, or fail without changing broadcast synchronization
+state. Bluetooth stack initialization and physical controller resources are shared
+platform concerns rather than state owned by either subsystem.
 
 ### Semantic responsibility
 
-This subsystem owns connectable advertising, the BLE connection lifecycle, and availability
-of the custom GATT control interface. It receives control messages, but the subsystem that
-owns a requested behavior validates and executes the command.
+This subsystem owns the policy and lifecycle for control availability, retains the selected
+peer, negotiates and authorizes the vendor protocol session, and translates remote requests
+into semantic internal operations. The shared Bluetooth Management module performs the
+physical advertising and connection procedures. The subsystem that owns requested device,
+broadcast, or codec behavior remains responsible for final validation and execution.
 
 | State | Meaning |
 |---|---|
 | `DISABLED` | The Control Link subsystem is unavailable. |
 | `ADVERTISING` | The subsystem is accepting BLE connection requests. |
-| `CONNECTED` | A BLE connection exists and the custom GATT control interface is available. |
+| `LINKED` | An ACL connection exists, but an authorized Tiresias custom-protocol session is not yet ready. Standard services remain available according to their permissions. |
+| `READY` | The peer is secure and authorized, protocol negotiation is complete, and the Tiresias custom service can exchange requests and responses. |
 | `ERROR` | The Control Link subsystem cannot continue without recovery. |
 
 ```mermaid
 stateDiagram-v2
     [*] --> DISABLED
     DISABLED --> ADVERTISING: ENABLE_CONTROL
-    ADVERTISING --> CONNECTED: BLE_CONNECTED
-    CONNECTED --> ADVERTISING: BLE_DISCONNECTED
+    ADVERTISING --> LINKED: BLE_CONNECTED
+    LINKED --> READY: SECURE_AND_AUTHORIZED
+    LINKED --> ADVERTISING: BLE_DISCONNECTED
+    READY --> ADVERTISING: BLE_DISCONNECTED
 
     ADVERTISING --> DISABLED: DISABLE_CONTROL
-    CONNECTED --> DISABLED: DISABLE_CONTROL
+    LINKED --> DISABLED: DISABLE_CONTROL
+    READY --> DISABLED: DISABLE_CONTROL
 
     ADVERTISING --> ERROR: FATAL_BLE_ERROR
-    CONNECTED --> ERROR: FATAL_BLE_ERROR
+    LINKED --> ERROR: FATAL_BLE_ERROR
+    READY --> ERROR: FATAL_BLE_ERROR
     ERROR --> DISABLED: RESET
 ```
 
 Individual GATT reads, writes, and notifications normally remain events or actions within
-`CONNECTED`; they are not persistent states.
+`READY`; they are not persistent states. Remote request rejection does not enter `ERROR`.
+The `LINKED` distinction also permits a Broadcast Assistant to use the standardized BASS
+interface without opening the vendor-specific Tiresias protocol.
 
-Control Link behavior is not implemented in the initial PoC; its thread and state-machine
-structure remain disabled placeholders for the later GATT work.
+The Control Link foundation uses the shared Bluetooth initializer, starts connectable
+advertising, exposes the standard read-only Device Information Service, tracks the
+physical ACL, restarts advertising after disconnection, and drives LED 1. Its `CONNECTED`
+state must evolve to the target `LINKED`/`READY` semantics, or an equivalent internal
+session distinction, before the custom Tiresias GATT service accepts writes. The complete
+conceptual design is in [control-link.md](control-link.md).
 
 ## 3. Audio Streaming subsystem
 
@@ -280,7 +302,7 @@ stateDiagram-v2
 The two Bluetooth subsystems are orthogonal. A valid simultaneous condition is:
 
 ```text
-Control Link:         CONNECTED
+Control Link:         READY
 Audio Streaming:      STREAMING
 ```
 
@@ -288,6 +310,11 @@ For the initial PoC, `START_SCAN` from `DISABLED` performs receiver initializati
 starts scanning in one action. Stream or synchronization loss is cleaned up and returns
 directly to `SCANNING`; the explicit `RECOVERING` state and the enable/disable/reset command
 paths remain reserved for a later implementation stage.
+
+Audio Streaming owns LED 3 as its local status indicator. The LED blinks in `SCANNING`,
+stays continuously on in `PA_SYNCED`, `BIS_SYNCING`, and `STREAMING` while periodic
+advertising synchronization is held, and is off in `DISABLED`, `IDLE`, `RECOVERING`, and
+`ERROR`.
 
 ## 4. Codec Controller subsystem
 
@@ -407,7 +434,7 @@ states coexist rather than nest. For example:
 
 ```text
 Device Controller:    OPERATIONAL
-Control Link:         CONNECTED
+Control Link:         READY
 Audio Streaming:      STREAMING
 Codec Controller:     ACTIVE / BROADCAST_ONLY
 ```
@@ -448,6 +475,7 @@ The audio data plane remains separate:
 | Information | Transport |
 |---|---|
 | Commands, events, and state reports | Zbus channels or subsystem queues |
+| Cataloged parameter requests and future bulk management transfers | Dedicated ordered queues; fixed buffer pools for bulk payloads |
 | Bluetooth ISO SDUs and LC3 frames | Dedicated FIFOs |
 | PCM and I2S blocks | Fixed buffers and real-time callbacks |
 | High-rate IMU samples | Dedicated sensor queue or buffer if required |
@@ -466,9 +494,9 @@ GPIO and cannot be sampled by the SAADC.
 | Component | Current behavior | Architectural status |
 |---|---|---|
 | Device Controller subsystem | Supervises startup and user mode-selection policy on the main thread without mirroring codec presentation mode. | Implemented for the initial local-audio and BIS-reception path. |
-| Audio Streaming subsystem | Initializes Bluetooth and manages broadcast discovery, PA/BIS synchronization, pipeline lifecycle, and recovery. | Implemented for BIS reception; future CIS support remains possible. |
+| Audio Streaming subsystem | Uses shared Bluetooth Management and manages broadcast discovery, PA/BIS synchronization, pipeline lifecycle, and recovery. | Implemented for BIS reception; future CIS support remains possible. |
 | Codec Controller subsystem | Owns ADAU1787 initialization, local/I2S selection, state, and presentation indication. | Implemented with `LOCAL_ONLY` and `BROADCAST_ONLY` presentation modes. |
-| Control Link subsystem | Defines its state machine and execution context but does not yet implement connectable BLE or GATT behavior. | Deferred beyond the initial PoC. |
+| Control Link subsystem | Enables connectable BLE at startup, exposes DIS, follows ACL lifecycle events, restarts advertising after disconnect, and owns LED 1 indication. | The custom service, parameter catalog and access, authorization model, and BASS relationship remain specified in [control-link.md](control-link.md). |
 | Legacy `controller`, `bluetooth`, and `audio_control` sources | Remain in the repository as reference but are not compiled. | Superseded by the subsystem implementations. |
 | ADAU1787 driver and control code | Performs codec programming and parameter operations. | Serves as the implementation behind the Codec Controller subsystem; short synchronous configuration operations remain actions rather than states. |
 | Zbus channels | Carry commands, state reports, button events, and LE Audio lifecycle events | Remain the principal control-plane communication mechanism. |

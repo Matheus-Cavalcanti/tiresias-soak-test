@@ -1,7 +1,7 @@
 /*
  * File:           C:\users\crossover\Desktop\exports\adau_1787_IC_1_FAST.h
  *
- * Created:        Saturday, August 1, 2026 2:39:58 PM
+ * Created:        Thursday, August 13, 2026 2:03:29 PM
  * Description:    adau_1787:IC 1-Fast program data.
  *
  * This software is distributed in the hope that it will be useful,
