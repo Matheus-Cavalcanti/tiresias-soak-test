@@ -26,11 +26,13 @@ The codec is therefore programmed before BCLK and LRCK begin toggling.
 | Generated FastDSP start sequence | `src/SigmaStudioFiles/tiresias-soak-ha_IC_1_FAST.h` |
 | Generated register and parameter symbols | `src/SigmaStudioFiles/*_REG.h` and `src/SigmaStudioFiles/*_PARAM.h` |
 | Application devicetree pin override | `boards/tiresias_dk_nrf5340_cpuapp.overlay` |
-| Base codec node and binding | `../boards/eesc-usp/tiresias_dk/tiresias_dk_nrf5340_cpuapp_common.dtsi` and `../boards/eesc-usp/tiresias_dk/dts/bindings/audio/adi,adau1787.yaml` |
+| Base codec node | `../boards/eesc-usp/tiresias_dk/tiresias_dk_nrf5340_cpuapp_common.dtsi` |
+| ADAU1787 devicetree binding | `dts/bindings/audio/adi,adau1787.yaml` |
 
-The last two base-board files are supplied by the sibling `boards` repository,
-not by this application repository. They remain compile-time dependencies
-because the driver uses `DT_NODELABEL(adau_1787)`.
+The base codec node is supplied by the sibling `boards` repository. The binding
+is kept in this application repository so the required ADAU1787 GPIO contract
+is versioned together with the driver. The base node remains a compile-time
+dependency because the driver uses `DT_NODELABEL(adau_1787)`.
 
 ## End-to-End Sequence
 
