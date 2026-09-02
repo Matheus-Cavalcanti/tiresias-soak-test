@@ -1,0 +1,31 @@
+description: Analog Devices ADAU1787 audio codec and DSP
+
+compatible: "adi,adau1787"
+
+include: i2c-device.yaml
+
+properties:
+  powerdown-gpios:
+    type: phandle-array
+    required: true
+    description: Active-low ADAU1787 power-down input
+
+  mp3-gpios:
+    type: phandle-array
+    required: true
+    description: ADAU1787 multipurpose pin 3 connection
+
+  mp4-gpios:
+    type: phandle-array
+    required: true
+    description: ADAU1787 multipurpose pin 4 connection
+
+  mp5-gpios:
+    type: phandle-array
+    required: true
+    description: ADAU1787 multipurpose pin 5 connection
+
+  mp6-gpios:
+    type: phandle-array
+    required: true
+    description: ADAU1787 multipurpose pin 6 connection
