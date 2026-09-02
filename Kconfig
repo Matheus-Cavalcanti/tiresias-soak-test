@@ -4,8 +4,17 @@
 # SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
 #
 
+config TIRESIAS_SOAK_PROFILE_HA
+	bool "Minimal hearing-aid soak-test image"
+	help
+	  Program the ADAU1787 over I2C and then leave the nRF5340 application
+	  core idle. Bluetooth, the network core and the nRF I2S peripheral are
+	  intentionally not part of this profile; the ADAU1787 receives MCLK from
+	  the board's external oscillator.
+
 menuconfig NRF5340_AUDIO
 	 bool "nRF5340 Audio [EXPERIMENTAL]"
+	 depends on !TIRESIAS_SOAK_PROFILE_HA
 	 select EXPERIMENTAL
 
 if NRF5340_AUDIO

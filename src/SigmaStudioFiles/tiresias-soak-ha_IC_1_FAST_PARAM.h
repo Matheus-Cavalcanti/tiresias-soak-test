@@ -1,8 +1,8 @@
 /*
- * File:           C:\users\crossover\Desktop\exports\adau_1787_IC_1_FAST_PARAM.h
+ * File:           C:\Users\colombari\Desktop\tiresias-soak\tiresias-soak-ha\tiresias-soak-ha-export\tiresias-soak-ha_IC_1_FAST_PARAM.h
  *
- * Created:        Thursday, August 13, 2026 2:03:29 PM
- * Description:    adau_1787:IC 1-Fast parameter RAM definitions.
+ * Created:        Wednesday, September 2, 2026 2:26:02 PM
+ * Description:    tiresias-soak-ha:IC 1-Fast parameter RAM definitions.
  *
  * This software is distributed in the hope that it will be useful,
  * but is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
@@ -16,8 +16,8 @@
  *
  * Copyright ©2026 Analog Devices, Inc. All rights reserved.
  */
-#ifndef __ADAU_1787_IC_1_FAST_PARAM_H__
-#define __ADAU_1787_IC_1_FAST_PARAM_H__
+#ifndef __TIRESIAS_SOAK_HA_IC_1_FAST_PARAM_H__
+#define __TIRESIAS_SOAK_HA_IC_1_FAST_PARAM_H__
 
 
 #endif

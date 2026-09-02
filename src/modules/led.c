@@ -3,9 +3,8 @@
  * @brief LED peripheral module.
  *
  * Implements LED control using a Zbus subscriber. A worker thread waits for
- * messages on `led_chan` and handles commands (on/off/toggle/blink). GPIOs
- * are configured during `init_led()` and the module maintains simple state
- * to support blinking.
+ * messages on `led_chan`. LED GPIOs are left disconnected so they do not
+ * affect power measurements.
  */
 
 #include "led.h"
@@ -35,22 +34,7 @@ static const struct gpio_dt_spec leds[] = {
 };
 
 #define N_LEDS ARRAY_SIZE(leds)
-#define BLINK_FREQ_MS 500
 #define LED_SUB_Q_SIZE 3
-
-static uint32_t blinking_mask;
-
-static void blink_timer_handler(struct k_timer* timer)
-{
-  ARG_UNUSED(timer);
-
-  for (int i = 0; i < N_LEDS; i++) {
-    if ((blinking_mask & BIT(i)) != 0) {
-      gpio_pin_toggle_dt(&leds[i]);
-    }
-  }
-}
-K_TIMER_DEFINE(blink_timer, blink_timer_handler, NULL);
 
 ZBUS_SUBSCRIBER_DEFINE(led_sub, LED_SUB_Q_SIZE);
 
@@ -58,6 +42,11 @@ ZBUS_CHAN_DEFINE(led_chan, led_chan_msg_t, NULL, NULL, ZBUS_OBSERVERS(led_sub), 
 
 #define LED_THREAD_STACK_SIZE 1024
 #define LED_THREAD_PRIORITY 6
+
+static int led_disconnect(int led_n)
+{
+  return gpio_pin_configure(leds[led_n].port, leds[led_n].pin, GPIO_DISCONNECTED);
+}
 
 static int handle_led_msg(led_chan_msg_t msg)
 {
@@ -70,30 +59,10 @@ static int handle_led_msg(led_chan_msg_t msg)
 
   switch (msg.cmd) {
   case TURN_OFF:
-    blinking_mask &= ~BIT(led_n);
-    ret = gpio_pin_set_dt(&leds[led_n], GPIO_OUTPUT_INACTIVE);
-    ERR_CHK(ret);
-    if (blinking_mask == 0) {
-      k_timer_stop(&blink_timer);
-    }
-    break;
-
   case TURN_ON:
-    blinking_mask &= ~BIT(led_n);
-    ret = gpio_pin_set_dt(&leds[led_n], GPIO_OUTPUT_ACTIVE);
-    ERR_CHK(ret);
-    if (blinking_mask == 0) {
-      k_timer_stop(&blink_timer);
-    }
-    break;
-
   case BLINK:
-    blinking_mask |= BIT(led_n);
-    k_timer_start(&blink_timer, K_MSEC(BLINK_FREQ_MS), K_MSEC(BLINK_FREQ_MS));
-    break;
-
   case TOGGLE:
-    ret = gpio_pin_toggle_dt(&leds[led_n]);
+    ret = led_disconnect(led_n);
     ERR_CHK(ret);
     break;
 
@@ -137,7 +106,7 @@ int led_init(void)
       return -ENODEV;
     }
 
-    ret = gpio_pin_configure_dt(&leds[i], GPIO_OUTPUT_INACTIVE);
+    ret = led_disconnect(i);
     ERR_CHK(ret);
   }
 

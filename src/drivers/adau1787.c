@@ -1,12 +1,12 @@
 #include "adau1787.h"
 #include "SigmaStudioFW.h"
-#include "adau_1787_IC_1_FAST.h"
-#include "adau_1787_IC_1_FAST_PARAM.h"
-#include "adau_1787_IC_1_FAST_REG.h"
-#include "adau_1787_IC_1_SIGMA.h"
-#include "adau_1787_IC_1_SIGMA_PARAM.h"
-#include "adau_1787_IC_1_SIGMA_REG.h"
 #include "macros_common.h"
+#include "tiresias-soak-ha_IC_1_FAST.h"
+#include "tiresias-soak-ha_IC_1_FAST_PARAM.h"
+#include "tiresias-soak-ha_IC_1_FAST_REG.h"
+#include "tiresias-soak-ha_IC_1_SIGMA.h"
+#include "tiresias-soak-ha_IC_1_SIGMA_PARAM.h"
+#include "tiresias-soak-ha_IC_1_SIGMA_REG.h"
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -43,6 +43,21 @@ static const struct gpio_dt_spec codec_mp6 = GPIO_DT_SPEC_GET(ADAU1787_NODE, mp6
 static int adau_init_error = 0;
 
 #define ADAU1787_FIELD_GET(value, mask, shift) (((value) & (mask)) >> (shift))
+
+static int disconnect_serial_gpio(const struct gpio_dt_spec* gpio, const char* name)
+{
+  if (!gpio_is_ready_dt(gpio)) {
+    LOG_ERR("ADAU1787 %s GPIO controller is not ready", name);
+    return -ENODEV;
+  }
+
+  int ret = gpio_pin_configure(gpio->port, gpio->pin, GPIO_DISCONNECTED);
+  if (ret != 0) {
+    LOG_ERR("Failed to disconnect ADAU1787 %s GPIO: %d", name, ret);
+  }
+
+  return ret;
+}
 
 void adau1787_log_status_2(void)
 {
@@ -101,43 +116,23 @@ int adau1787_config_gpios(void)
     return ret;
   }
 
-  if (!gpio_is_ready_dt(&codec_mp3)) {
-    LOG_ERR("ADAU1787 MP3 controller is not ready");
-    return -ENODEV;
-  }
-  ret = gpio_pin_configure_dt(&codec_mp3, GPIO_OUTPUT_INACTIVE);
+  ret = disconnect_serial_gpio(&codec_mp3, "MP3");
   if (ret != 0) {
-    LOG_ERR("Failed to configure ADAU1787 MP3 GPIO: %d", ret);
     return ret;
   }
 
-  if (!gpio_is_ready_dt(&codec_mp4)) {
-    LOG_ERR("ADAU1787 MP4 controller is not ready");
-    return -ENODEV;
-  }
-  ret = gpio_pin_configure_dt(&codec_mp4, GPIO_OUTPUT_INACTIVE);
+  ret = disconnect_serial_gpio(&codec_mp4, "MP4");
   if (ret != 0) {
-    LOG_ERR("Failed to configure ADAU1787 MP4 GPIO: %d", ret);
     return ret;
   }
 
-  if (!gpio_is_ready_dt(&codec_mp5)) {
-    LOG_ERR("ADAU1787 MP5 controller is not ready");
-    return -ENODEV;
-  }
-  ret = gpio_pin_configure_dt(&codec_mp5, GPIO_OUTPUT_INACTIVE);
+  ret = disconnect_serial_gpio(&codec_mp5, "MP5");
   if (ret != 0) {
-    LOG_ERR("Failed to configure ADAU1787 MP5 GPIO: %d", ret);
     return ret;
   }
 
-  if (!gpio_is_ready_dt(&codec_mp6)) {
-    LOG_ERR("ADAU1787 MP6 controller is not ready");
-    return -ENODEV;
-  }
-  ret = gpio_pin_configure_dt(&codec_mp6, GPIO_OUTPUT_INACTIVE);
+  ret = disconnect_serial_gpio(&codec_mp6, "MP6");
   if (ret != 0) {
-    LOG_ERR("Failed to configure ADAU1787 MP6 GPIO: %d", ret);
     return ret;
   }
 

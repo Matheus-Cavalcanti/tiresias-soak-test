@@ -1,8 +1,8 @@
 /*
- * File:           C:\users\crossover\Desktop\exports\adau_1787_IC_1_SIGMA_REG.h
+ * File:           C:\Users\colombari\Desktop\tiresias-soak\tiresias-soak-ha\tiresias-soak-ha-export\tiresias-soak-ha_IC_1_SIGMA_REG.h
  *
- * Created:        Thursday, August 13, 2026 2:03:29 PM
- * Description:    adau_1787:IC 1-Sigma control register definitions.
+ * Created:        Wednesday, September 2, 2026 2:26:02 PM
+ * Description:    tiresias-soak-ha:IC 1-Sigma control register definitions.
  *
  * This software is distributed in the hope that it will be useful,
  * but is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
@@ -16,8 +16,8 @@
  *
  * Copyright ©2026 Analog Devices, Inc. All rights reserved.
  */
-#ifndef __ADAU_1787_IC_1_SIGMA_REG_H__
-#define __ADAU_1787_IC_1_SIGMA_REG_H__
+#ifndef __TIRESIAS_SOAK_HA_IC_1_SIGMA_REG_H__
+#define __TIRESIAS_SOAK_HA_IC_1_SIGMA_REG_H__
 
 
 /* VENDOR_ID  - Registers (IC 1_Sigma) */
@@ -133,7 +133,7 @@
 /* ADC_CTRL3  - Registers (IC 1_Sigma) */
 #define REG_ADC_CTRL3_IC_1_Sigma_ADDR             0xC019
 #define REG_ADC_CTRL3_IC_1_Sigma_BYTE             1
-#define REG_ADC_CTRL3_IC_1_Sigma_VALUE            0x3
+#define REG_ADC_CTRL3_IC_1_Sigma_VALUE            0x1
 
 /* ADC_CTRL4  - Registers (IC 1_Sigma) */
 #define REG_ADC_CTRL4_IC_1_Sigma_ADDR             0xC01A
@@ -1422,7 +1422,7 @@
 
 /* ADC_CTRL3 (IC 1_Sigma) */
 #define R22_ADC0_HPF_EN_IC_1_Sigma                0x1    /* 1b	[0] */
-#define R22_ADC1_HPF_EN_IC_1_Sigma                0x1    /* 1b	[1] */
+#define R22_ADC1_HPF_EN_IC_1_Sigma                0x0    /* 0b	[1] */
 #define R22_ADC2_HPF_EN_IC_1_Sigma                0x0    /* 0b	[2] */
 #define R22_ADC3_HPF_EN_IC_1_Sigma                0x0    /* 0b	[3] */
 #define R22_ADC0_HPF_EN_IC_1_Sigma_MASK           0x1

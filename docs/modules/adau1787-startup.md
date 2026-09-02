@@ -22,8 +22,8 @@ The codec is therefore programmed before BCLK and LRCK begin toggling.
 | Hardware-codec abstraction | `src/modules/hw_codec.c` |
 | ADAU1787 GPIO, I2C, programming, and status driver | `src/drivers/adau1787.c` and `src/drivers/adau1787.h` |
 | SigmaStudio-to-driver adaptation macros | `src/drivers/SigmaStudioFW.h` |
-| Generated SigmaDSP program, parameters, and register sequence | `src/SigmaStudioFiles/adau_1787_IC_1_SIGMA.h` |
-| Generated FastDSP start sequence | `src/SigmaStudioFiles/adau_1787_IC_1_FAST.h` |
+| Generated SigmaDSP program, parameters, and register sequence | `src/SigmaStudioFiles/tiresias-soak-ha_IC_1_SIGMA.h` |
+| Generated FastDSP start sequence | `src/SigmaStudioFiles/tiresias-soak-ha_IC_1_FAST.h` |
 | Generated register and parameter symbols | `src/SigmaStudioFiles/*_REG.h` and `src/SigmaStudioFiles/*_PARAM.h` |
 | Application devicetree pin override | `boards/tiresias_dk_nrf5340_cpuapp.overlay` |
 | Base codec node and binding | `../boards/eesc-usp/tiresias_dk/tiresias_dk_nrf5340_cpuapp_common.dtsi` and `../boards/eesc-usp/tiresias_dk/dts/bindings/audio/adi,adau1787.yaml` |
@@ -53,7 +53,7 @@ sequenceDiagram
     System->>I2S: audio_datapath_init()
     I2S->>I2S: start 12.288 MHz ACLK and configure I2S
     Note right of I2S: Peripheral is idle and no PCM frames are running yet
-    Driver->>Codec: assert !PD and drive MP3 through MP6 inactive
+    Driver->>Codec: assert !PD and leave MP3 through MP6 disconnected
     Driver->>Driver: configure I2C Fast Plus
     Driver->>Codec: release !PD
     Driver->>Driver: sleep 100 ms
@@ -117,10 +117,10 @@ forwarded to `adau1787_write()`, which uses the devicetree address `0x2B`.
 | Signal | Effective nRF5340 pin | Startup behavior |
 | --- | --- | --- |
 | ADAU1787 `!PD` | P1.0, active low | Asserted while GPIOs are configured, then released before programming |
-| MP3 | P1.14 | Configured as inactive output (physical low) |
-| MP4 | P1.15 | Configured as inactive output (physical low) |
-| MP5 | P1.12 | Configured as inactive output (physical low) |
-| MP6 | P1.13 | Configured as inactive output (physical low) |
+| MP3 | P1.14 | Disconnected (high impedance) until an enabled I2S profile claims it |
+| MP4 | P1.15 | Disconnected (high impedance) until an enabled I2S profile claims it |
+| MP5 | P1.12 | Disconnected (high impedance) until an enabled I2S profile claims it |
+| MP6 | P1.13 | Disconnected (high impedance) until an enabled I2S profile claims it |
 | I2S MCK | P1.1 | Configured by I2S pinctrl |
 | I2S SCK | P0.6 | Driven by the nRF5340 I2S master when the stream starts |
 | I2S LRCK | P0.7 | Driven by the nRF5340 I2S master when the stream starts |
@@ -167,8 +167,9 @@ The GPIO setup is deliberately ordered as follows:
 1. Verify the `!PD` GPIO controller is ready.
 2. Configure `!PD` as an active output, asserting the active-low pin. This
    gives every nRF5340 reset a corresponding codec reset/power-down pulse.
-3. Verify and configure MP3, MP4, MP5, and MP6 one at a time as inactive
-   outputs.
+3. Verify and disconnect MP3, MP4, MP5, and MP6 one at a time. This keeps the
+   nRF side in high impedance while the SigmaStudio download configures the
+   ADAU1787 serial ports.
 
 Each readiness or configuration failure stops this phase. A controller that is
 not ready produces `-ENODEV`; a GPIO configuration error is propagated as
@@ -348,7 +349,7 @@ When startup fails, check in this order:
    the application overlay, address `0x2B`, and the expected swapped MP/I2S
    pins.
 2. **GPIO readiness and polarity:** `!PD` must first go physically low and then
-   high; MP3 through MP6 remain low during initialization.
+   high; MP3 through MP6 remain disconnected during initialization.
 3. **I2C bus setup:** verify `I2C_1`, P1.2/P1.3, and that Fast Plus mode was
    accepted. An `i2c_configure()` failure is logged and returned.
 4. **First transfer timing:** the first I2C transaction occurs 100 ms after

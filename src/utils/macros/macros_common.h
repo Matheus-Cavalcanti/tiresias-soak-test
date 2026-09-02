@@ -10,7 +10,7 @@
 #include <errno.h>
 
 /* Error check. If != 0, print err code and call _SysFatalErrorHandler in main.
- * For debug mode all LEDs are turned on in case of an error.
+ * For debug mode the system enters an infinite loop in case of an error.
  */
 
 #define PRINT_AND_OOPS(code)                                                                       \

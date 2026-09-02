@@ -6,8 +6,8 @@
  * @brief LED module public API.
  *
  * Exposes a single initialization function for the LED peripheral. The
- * implementation subscribes to a Zbus channel to react to LED commands
- * (on/off/toggle/blink) and manages GPIO configuration.
+ * implementation subscribes to a Zbus channel and leaves LED GPIOs disconnected
+ * during power measurements.
  */
 
 #include "macros_common.h"
@@ -19,7 +19,7 @@
 /**
  * @brief Initialize LED GPIOs and prepare the module.
  *
- * Configures all LED pins as outputs and sets them inactive. Must be called
+ * Disconnects all LED pins from GPIO output control. Must be called
  * before any LED commands are processed.
  *
  * @return 0 on success, negative errno-style value on failure.

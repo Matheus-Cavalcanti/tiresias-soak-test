@@ -14,7 +14,22 @@ find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 
 project(new-tiresias)
 
-string(TIMESTAMP NRF5340_AUDIO_CORE_APP_COMP_DATE "%a %b %d %H:%M:%S %Y")
+# The HA soak profile only programs the ADAU1787 and then lets the application
+# core fall through to Zephyr's idle thread. Keep the normal application source
+# graph untouched for the BLE profiles.
+if(CONFIG_TIRESIAS_SOAK_PROFILE_HA)
+  target_sources(app PRIVATE src/modes/main_ha.c)
+
+  zephyr_library_include_directories(
+      src/drivers
+      src/utils/macros
+      src/SigmaStudioFiles
+  )
+
+  add_subdirectory(src/drivers)
+  add_subdirectory(src/SigmaStudioFiles)
+else()
+  string(TIMESTAMP NRF5340_AUDIO_CORE_APP_COMP_DATE "%a %b %d %H:%M:%S %Y")
 
 # Generate fw_info_app.c
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/src/utils/fw_info_app.c.in"
@@ -52,3 +67,4 @@ add_subdirectory(src/drivers)
 add_subdirectory(src/modules)
 add_subdirectory(src/utils)
 add_subdirectory(src/SigmaStudioFiles)
+endif()

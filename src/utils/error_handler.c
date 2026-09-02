@@ -27,9 +27,9 @@ void error_handler(unsigned int reason, const struct arch_esf *esf)
 	LOG_ERR("Caught system error -- reason %d. Entering infinite loop", reason);
 	LOG_PANIC();
 #if defined(CONFIG_BOARD_NRF5340_AUDIO_DK_NRF5340_CPUAPP)
-	(void)gpio_pin_configure_dt(&center_led_r, GPIO_OUTPUT_ACTIVE);
-	(void)gpio_pin_configure_dt(&center_led_g, GPIO_OUTPUT_INACTIVE);
-	(void)gpio_pin_configure_dt(&center_led_b, GPIO_OUTPUT_INACTIVE);
+	(void)gpio_pin_configure(center_led_r.port, center_led_r.pin, GPIO_DISCONNECTED);
+	(void)gpio_pin_configure(center_led_g.port, center_led_g.pin, GPIO_DISCONNECTED);
+	(void)gpio_pin_configure(center_led_b.port, center_led_b.pin, GPIO_DISCONNECTED);
 #endif /* defined(CONFIG_BOARD_NRF5340_AUDIO_DK_NRF5340_CPUAPP) */
 	irq_lock();
 	while (1) {

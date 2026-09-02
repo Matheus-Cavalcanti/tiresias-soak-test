@@ -18,7 +18,7 @@
 #ifndef ADAU1787_H
 #define ADAU1787_H
 
-#include "adau_1787_IC_1_SIGMA_REG.h"
+#include "tiresias-soak-ha_IC_1_SIGMA_REG.h"
 #include <stddef.h>
 #include <stdint.h>
 #include <zephyr/drivers/i2c.h>

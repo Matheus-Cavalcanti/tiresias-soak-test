@@ -1,0 +1,4 @@
+/* The ADAU1787 is clocked by the external 24.576 MHz oscillator in this test. */
+&i2s0 {
+	status = "disabled";
+};

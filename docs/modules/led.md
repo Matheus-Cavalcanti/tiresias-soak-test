@@ -1,12 +1,12 @@
 # LED Indicator Subsystem
 
 The LED Indicator subsystem owns LED GPIO setup and receives LED commands through
-Zbus. It keeps LED handling simple: commands are published to `led_chan`, and a
-local worker thread applies them to the configured GPIOs.
+Zbus. For power measurements, the local worker thread currently leaves the
+configured GPIOs disconnected regardless of the requested LED command.
 
 ## Files
 
-- `src/modules/led.c`: GPIO configuration, zbus subscriber, LED command handling, and blink timer.
+- `src/modules/led.c`: GPIO configuration, zbus subscriber, and disabled LED command handling.
 - `src/modules/led.h`: public initialization API.
 - `include/zbus_common.h`: LED command and zbus message types.
 
@@ -29,8 +29,8 @@ Call `led_init()` during board/application initialization.
 int led_init(void);
 ```
 
-The init function verifies that each GPIO controller is ready and configures all
-LED pins as inactive outputs.
+The init function verifies that each GPIO controller is ready and disconnects all
+LED pins from GPIO output control.
 
 ## Zbus Contract
 
@@ -63,10 +63,10 @@ typedef struct led_chan_msg_t {
 ```
 
 Authorized subsystems publish commands to `led_chan`; the LED Indicator thread
-receives each command and updates the selected LED.
+receives each command and leaves the selected LED disconnected.
 
-Current indication ownership is assigned per LED so independent publishers cannot fight
-over one GPIO:
+Logical indication ownership is still assigned per LED so independent publishers
+do not fight over one GPIO when LED output is re-enabled:
 
 | LED | Publisher and meaning |
 |---|---|
@@ -80,21 +80,19 @@ ownership requires an explicit priority or composition policy.
 
 ## Commands
 
-- `TURN_ON`: sets the selected LED active and removes it from the blink mask.
-- `TURN_OFF`: sets the selected LED inactive and removes it from the blink mask.
-- `TOGGLE`: toggles the selected LED once.
-- `BLINK`: adds the selected LED to the blink mask and starts the blink timer.
+- `TURN_ON`: leaves the selected LED disconnected.
+- `TURN_OFF`: leaves the selected LED disconnected.
+- `TOGGLE`: leaves the selected LED disconnected.
+- `BLINK`: leaves the selected LED disconnected.
 
-The blink timer toggles every `BLINK_FREQ_MS`. The timer stops automatically
-when no LEDs remain in the blink mask.
+The blink timer is not used while LEDs are disabled for power measurements.
 
 ## Runtime Flow
 
 1. `led_init()` configures the LED GPIOs.
 2. The LED Indicator subsystem's Zbus subscriber thread waits for `led_chan` messages.
 3. `handle_led_msg()` validates the LED index and command.
-4. GPIO state is updated immediately, or the LED is added to the blink mask.
-5. The timer toggles all LEDs currently present in the blink mask.
+4. GPIO output control is disconnected for the selected LED.
 
 ## Extending For More LEDs
 

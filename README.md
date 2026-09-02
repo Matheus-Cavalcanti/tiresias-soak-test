@@ -14,6 +14,8 @@ physical controls, and board indicators.
   and hardware views.
 - [Module reference](docs/modules/): implementation-level contracts for
   firmware modules.
+- [Soak-test profiles](profiles/README.md): matched firmware/SigmaStudio
+  configurations for HA, BLE-DAC, and BLE-HA current measurements.
 
 Add cross-cutting workflow guidance and recurring development reminders to the
 development guide. Keep module-specific details in the corresponding module
