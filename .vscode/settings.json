@@ -1,0 +1,19 @@
+{
+  "files.associations": {
+    "nrf5340_audio_dk.h": "c",
+    "button_assignments.h": "c",
+    "led.h": "c",
+    "adau_1787_ic_1_sigma_reg.h": "c",
+    "stdbool.h": "c",
+    "sw_codec_select.h": "c",
+    "hw_codec.h": "c",
+    "macros_common.h": "c",
+    "ratio": "c",
+    "system_error": "c",
+    "array": "c",
+    "functional": "c",
+    "tuple": "c",
+    "type_traits": "c",
+    "utility": "c"
+  }
+}

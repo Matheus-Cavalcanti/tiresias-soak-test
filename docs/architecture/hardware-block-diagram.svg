@@ -1,0 +1,196 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2000" height="1200" viewBox="0 0 2000 1200">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#172033"/>
+    </marker>
+    <style>
+      text { font-family: Inter, Arial, sans-serif; fill: #172033; }
+      .title { font-size: 30px; font-weight: 700; }
+      .boundary-title { font-size: 23px; font-weight: 700; }
+      .node-title { font-size: 20px; font-weight: 650; }
+      .node-text { font-size: 17px; }
+      .edge-label { font-size: 15px; font-weight: 600; paint-order: stroke; stroke: #fff; stroke-width: 7px; stroke-linejoin: round; }
+      .board { fill: #fbfcfe; stroke: #172033; stroke-width: 4; }
+      .soc { fill: #eaf1fb; stroke: #235ea7; stroke-width: 4; }
+      .core { fill: #fff; stroke: #235ea7; stroke-width: 2.5; }
+      .hardware { fill: #fff; stroke: #172033; stroke-width: 2.5; }
+      .audio { fill: #fff4e5; stroke: #b26a00; stroke-width: 3; }
+      .power { fill: #f3e8ff; stroke: #7e22ce; stroke-width: 3; }
+      .external { fill: #fff; stroke: #525b6b; stroke-width: 2.5; stroke-dasharray: 10 8; }
+      .port { fill: #dce9f8; stroke: #235ea7; stroke-width: 2; }
+      .signal { fill: none; stroke: #172033; stroke-width: 2.5; marker-end: url(#arrow); }
+      .bidir { fill: none; stroke: #172033; stroke-width: 2.5; marker-start: url(#arrow); marker-end: url(#arrow); }
+      .audio-line { fill: none; stroke: #b26a00; stroke-width: 3; marker-end: url(#arrow); }
+      .audio-bidir { fill: none; stroke: #b26a00; stroke-width: 3; marker-start: url(#arrow); marker-end: url(#arrow); }
+      .rf { fill: none; stroke: #1671b8; stroke-width: 3; marker-start: url(#arrow); marker-end: url(#arrow); }
+      .broadcast { fill: none; stroke: #1671b8; stroke-width: 3; marker-end: url(#arrow); }
+      .power-line { fill: none; stroke: #7e22ce; stroke-width: 2.5; stroke-dasharray: 9 7; marker-end: url(#arrow); }
+      .internal { fill: none; stroke: #637083; stroke-width: 2; }
+    </style>
+  </defs>
+
+  <rect width="2000" height="1200" fill="#fff"/>
+  <text x="40" y="50" class="title">Tiresias DK — Hardware Block Diagram</text>
+
+  <!-- External acoustic and radio context -->
+  <rect x="25" y="330" width="200" height="90" rx="18" class="external"/>
+  <text x="125" y="368" text-anchor="middle" class="node-title">Acoustic</text>
+  <text x="125" y="394" text-anchor="middle" class="node-title">environment</text>
+
+  <rect x="25" y="720" width="200" height="90" rx="45" class="external"/>
+  <text x="125" y="775" text-anchor="middle" class="node-title">Wearer</text>
+
+  <rect x="1765" y="710" width="210" height="100" rx="18" class="external"/>
+  <text x="1870" y="750" text-anchor="middle" class="node-title">LE Audio</text>
+  <text x="1870" y="778" text-anchor="middle" class="node-title">broadcaster</text>
+
+  <!-- Board boundary -->
+  <rect x="245" y="80" width="1490" height="1000" rx="10" class="board"/>
+  <text x="270" y="118" class="boundary-title">Tiresias DK</text>
+
+  <!-- Left-side board hardware -->
+  <rect x="285" y="155" width="260" height="80" rx="7" class="hardware"/>
+  <text x="415" y="205" text-anchor="middle" class="node-title">Button</text>
+
+  <rect x="285" y="260" width="260" height="100" rx="7" class="hardware"/>
+  <text x="415" y="300" text-anchor="middle" class="node-title">Bosch BMI270</text>
+  <text x="415" y="329" text-anchor="middle" class="node-text">IMU</text>
+
+  <rect x="285" y="395" width="260" height="72" rx="7" class="audio"/>
+  <text x="415" y="440" text-anchor="middle" class="node-title">Microphone input</text>
+
+  <rect x="285" y="490" width="260" height="180" rx="7" class="audio"/>
+  <text x="415" y="535" text-anchor="middle" class="node-title">Analog Devices</text>
+  <text x="415" y="565" text-anchor="middle" class="node-title">ADAU1787</text>
+  <text x="415" y="598" text-anchor="middle" class="node-text">Audio codec and DSP</text>
+  <text x="415" y="630" text-anchor="middle" class="node-text">ADC • DAC • SigmaDSP</text>
+
+  <rect x="285" y="695" width="260" height="82" rx="7" class="audio"/>
+  <text x="415" y="728" text-anchor="middle" class="node-title">Audio output</text>
+  <text x="415" y="756" text-anchor="middle" class="node-title">transducer</text>
+
+  <rect x="285" y="810" width="260" height="75" rx="7" class="hardware"/>
+  <text x="415" y="857" text-anchor="middle" class="node-title">LEDs</text>
+
+  <rect x="285" y="920" width="260" height="80" rx="7" class="power"/>
+  <text x="415" y="970" text-anchor="middle" class="node-title">Battery</text>
+
+  <!-- nRF5340 -->
+  <rect x="650" y="145" width="700" height="790" rx="10" class="soc"/>
+  <text x="675" y="182" class="boundary-title">Nordic nRF5340 SoC</text>
+
+  <rect x="690" y="215" width="620" height="390" rx="8" class="core"/>
+  <text x="715" y="250" class="boundary-title">Application core</text>
+
+  <rect x="720" y="290" width="160" height="58" rx="5" class="port"/>
+  <text x="800" y="326" text-anchor="middle" class="node-title">GPIO / IRQ</text>
+  <rect x="720" y="370" width="160" height="58" rx="5" class="port"/>
+  <text x="800" y="406" text-anchor="middle" class="node-title">I²C / TWIM</text>
+  <rect x="720" y="450" width="160" height="58" rx="5" class="port"/>
+  <text x="800" y="486" text-anchor="middle" class="node-title">I²S</text>
+  <rect x="720" y="530" width="160" height="58" rx="5" class="port"/>
+  <text x="800" y="566" text-anchor="middle" class="node-title">ADC</text>
+
+  <rect x="950" y="290" width="315" height="175" rx="8" class="hardware"/>
+  <text x="1108" y="345" text-anchor="middle" class="node-title">Application processing</text>
+  <text x="1108" y="382" text-anchor="middle" class="node-text">Audio processing</text>
+  <text x="1108" y="413" text-anchor="middle" class="node-text">Device control</text>
+
+  <rect x="950" y="495" width="150" height="65" rx="5" class="port"/>
+  <text x="1025" y="535" text-anchor="middle" class="node-title">QSPI</text>
+  <rect x="1115" y="495" width="150" height="65" rx="5" class="port"/>
+  <text x="1190" y="535" text-anchor="middle" class="node-title">IPC</text>
+
+  <rect x="690" y="645" width="620" height="245" rx="8" class="core"/>
+  <text x="715" y="682" class="boundary-title">Network core</text>
+  <rect x="745" y="725" width="300" height="100" rx="8" class="hardware"/>
+  <text x="895" y="767" text-anchor="middle" class="node-title">Bluetooth Controller</text>
+  <text x="895" y="797" text-anchor="middle" class="node-text">Link Layer and ISO timing</text>
+  <rect x="1100" y="725" width="165" height="100" rx="7" class="port"/>
+  <text x="1183" y="768" text-anchor="middle" class="node-title">2.4 GHz</text>
+  <text x="1183" y="798" text-anchor="middle" class="node-title">radio</text>
+
+  <!-- Right-side board hardware -->
+  <rect x="1420" y="175" width="260" height="115" rx="7" class="hardware"/>
+  <text x="1550" y="216" text-anchor="middle" class="node-title">Macronix MX25R1635F</text>
+  <text x="1550" y="247" text-anchor="middle" class="node-text">External flash memory</text>
+
+  <rect x="1420" y="385" width="260" height="145" rx="7" class="power"/>
+  <text x="1550" y="426" text-anchor="middle" class="node-title">Nordic nPM1100</text>
+  <text x="1550" y="456" text-anchor="middle" class="node-text">PMIC</text>
+  <text x="1550" y="493" text-anchor="middle" class="node-text">Battery measurement</text>
+
+  <rect x="1420" y="720" width="260" height="115" rx="7" class="hardware"/>
+  <text x="1550" y="762" text-anchor="middle" class="node-title">2.4 GHz antenna</text>
+  <text x="1550" y="793" text-anchor="middle" class="node-text">and matching network</text>
+
+  <!-- Internal SoC relationships -->
+  <path d="M 880 319 H 950" class="internal"/>
+  <path d="M 880 399 H 950" class="internal"/>
+  <path d="M 880 479 H 950" class="internal"/>
+  <path d="M 880 559 H 950" class="internal"/>
+  <path d="M 1100 527 H 950" class="internal"/>
+  <path d="M 1190 560 V 675 H 895 V 725" class="bidir"/>
+  <text x="1060" y="660" text-anchor="middle" class="edge-label">IPC</text>
+  <path d="M 1045 775 H 1100" class="internal"/>
+
+  <!-- Device interconnects -->
+  <path d="M 545 195 H 625 V 319 H 720" class="signal"/>
+  <text x="598" y="184" class="edge-label">GPIO</text>
+
+  <path d="M 545 292 H 615 V 319 H 720" class="signal"/>
+  <text x="575" y="282" class="edge-label">IRQ</text>
+  <path d="M 545 330 H 630 V 399 H 720" class="bidir"/>
+  <text x="590" y="382" class="edge-label">I²C</text>
+
+  <path d="M 545 555 H 620 V 399 H 720" class="bidir"/>
+  <text x="560" y="415" class="edge-label">Control</text>
+  <path d="M 545 600 H 640 V 479 H 720" class="audio-bidir"/>
+  <text x="572" y="490" class="edge-label">I²S PCM</text>
+  <path d="M 545 640 H 605 V 340 H 720" class="signal"/>
+  <text x="560" y="655" class="edge-label">PD / MP pins</text>
+
+  <path d="M 225 375 H 255 V 431 H 285" class="audio-line"/>
+  <text x="235" y="362" class="edge-label">Sound</text>
+  <path d="M 415 467 V 490" class="audio-line"/>
+  <text x="430" y="485" class="edge-label">Analog</text>
+  <path d="M 415 670 V 695" class="audio-line"/>
+  <text x="430" y="690" class="edge-label">Analog</text>
+  <path d="M 285 736 H 225 V 765" class="audio-line"/>
+  <text x="232" y="720" class="edge-label">Presented sound</text>
+
+  <path d="M 545 848 H 625 V 345 H 720" class="signal"/>
+  <text x="566" y="835" class="edge-label">GPIO</text>
+
+  <path d="M 1100 527 H 1370 V 232 H 1420" class="bidir"/>
+  <text x="1320" y="218" class="edge-label">QSPI</text>
+  <path d="M 1420 458 H 1370 V 559 H 1265" class="signal"/>
+  <text x="1290" y="550" class="edge-label">Battery measurement</text>
+
+  <path d="M 1265 775 H 1420" class="rf"/>
+  <text x="1338" y="760" class="edge-label">RF</text>
+  <path d="M 1765 760 H 1680" class="broadcast"/>
+  <text x="1685" y="744" class="edge-label">LE Audio broadcast</text>
+
+  <!-- Power -->
+  <path d="M 545 960 H 1370 V 495 H 1420" class="power-line"/>
+  <text x="940" y="945" class="edge-label">Battery power</text>
+  <path d="M 1420 430 H 1360 V 150 H 1250" class="power-line"/>
+  <path d="M 1420 480 H 1385 V 580 H 545" class="power-line"/>
+  <path d="M 1500 530 V 680 H 610 V 310 H 545" class="power-line"/>
+  <text x="1358" y="414" class="edge-label">System power rails</text>
+
+  <!-- Legend -->
+  <rect x="650" y="975" width="1030" height="75" rx="7" fill="#fff" stroke="#aab2bf" stroke-width="1.5"/>
+  <text x="675" y="1005" class="node-title">Legend</text>
+  <line x1="760" y1="1018" x2="840" y2="1018" class="signal"/>
+  <text x="855" y="1024" class="node-text">Signal / data</text>
+  <line x1="1020" y1="1018" x2="1100" y2="1018" class="audio-line"/>
+  <text x="1115" y="1024" class="node-text">Audio</text>
+  <line x1="1235" y1="1018" x2="1315" y2="1018" class="rf"/>
+  <text x="1330" y="1024" class="node-text">RF</text>
+  <line x1="1430" y1="1018" x2="1510" y2="1018" class="power-line"/>
+  <text x="1525" y="1024" class="node-text">Power</text>
+
+  <text x="270" y="1115" class="node-text">Conceptual architecture — verify pin assignments, rails, clocking, and installed options against the latest schematic.</text>
+</svg>
