@@ -28,6 +28,8 @@ if(CONFIG_TIRESIAS_SOAK_PROFILE_HA)
 
   add_subdirectory(src/drivers)
   add_subdirectory(src/SigmaStudioFiles)
+elseif(CONFIG_TIRESIAS_SOAK_PROFILE_ADAU_PD)
+  target_sources(app PRIVATE src/modes/main_adau_pd.c)
 else()
   string(TIMESTAMP NRF5340_AUDIO_CORE_APP_COMP_DATE "%a %b %d %H:%M:%S %Y")
 
