@@ -7,6 +7,7 @@ unused radio, I2S, logging, or indicator activity.
 | Profile | ADAU1787 signal path | nRF5340 workload | Status |
 |---|---|---|---|
 | `adau-pd` | Supply rails present; `!PD` explicitly held low; no control-port download | Assert one GPIO, log once, then idle | Implemented |
+| `eval-i2c` | External EVAL-ADAU1787Z power-state characterization; no DSP download | Independently powered Audio DK writes and verifies power registers | Implemented |
 | `ha` | Local microphones through the hearing-aid filter/compressor design | Program ADAU1787 over I2C, then idle | Implemented |
 | `ble-dac` | Transparent I2S-to-DAC design | Receive/decode BIS audio and drive I2S | Planned; awaiting SigmaStudio export |
 | `ble-ha` | I2S through the hearing-aid filter/compressor design | Receive/decode BIS audio and drive I2S | Planned; awaiting SigmaStudio export |
@@ -64,6 +65,12 @@ not execute a SigmaStudio download. The expected final message is:
 ```text
 ADAU1787 !PD asserted; no I2C/SigmaStudio download; entering idle
 ```
+
+For TIR-39 measurements on the EVAL-ADAU1787Z, use the independently powered
+nRF5340 Audio DK controller described in
+[`profiles/eval-i2c/README.md`](eval-i2c/README.md). It uses Audio DK `D9` and
+`D10` for a dedicated external I2C bus and keeps the EVAL out of the USBi power
+domain.
 
 In the nRF Connect for VS Code build configuration, select
 `tiresias_dk/nrf5340/cpuapp`, enable sysbuild and use the same four CMake
