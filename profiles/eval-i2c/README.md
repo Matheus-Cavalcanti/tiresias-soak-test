@@ -77,16 +77,18 @@ readback. Use three stabilized readings.
 
 | ID | `!PD` | `POWER_EN` | DVDD source | Purpose |
 |---|---:|---:|---|---|
-| A | 0 | Not accessible | Internal selected; output collapses | Hardware-PD baseline |
-| B | 1 | 0 | Internal LDO | Cost of releasing `!PD` while digitally off |
-| C | 1 | 1 | Internal LDO | Incremental cost of minimum digital domains |
-| D | 1 | 0 | External 0.9 V | Like-for-like software-PD comparison |
-| E | 1 | 1 | External 0.9 V | Like-for-like minimum-on comparison |
+| I1 | 0 | Not accessible | Internal selected; output collapses | Internal-DVDD hardware-PD baseline |
+| I2 | 1 | 0 | Internal LDO | Cost of releasing `!PD` while digitally off |
+| I3 | 1 | 1 | Internal LDO | Incremental cost of minimum digital domains |
+| E1 | 0 | Not accessible | External 0.9 V remains applied | External-DVDD hardware-PD baseline |
+| E2 | 1 | 0 | External 0.9 V | Like-for-like software-PD comparison |
+| E3 | 1 | 1 | External 0.9 V | Like-for-like minimum-on comparison |
 
 For external DVDD, include the 0.9 V supply power in the total; comparing only
 the EVAL 4.2 V input would omit the digital-domain energy.
 
 The earlier Tiresias measurements imply about 100 mW to 115 mW between
 hardware PD and awake-idle. At 4.2 V, an EVAL increase of approximately 24 mA
-to 28 mA reproduces that order of magnitude. After A-E are repeatable, TIR-39
-is complete; further audio or long-duration tests belong to the soak campaign.
+to 28 mA reproduces that order of magnitude. After I1-I3 and E1-E3 are
+repeatable, TIR-39 is complete; further audio or long-duration tests belong to
+the soak campaign.
