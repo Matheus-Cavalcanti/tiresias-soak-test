@@ -48,9 +48,12 @@ Each action waits 20 ms for the internal regulator after the manual release of
 back. The digital-on action follows the staged `0x11`, 35 ms, `0x15` sequence
 and requires `POWER_UP_COMPLETE=1` before reporting success.
 
-The internal-DVDD experiment uses `J12` open and `J24` ON. The external-DVDD
-experiment uses `REG_EN=0`, the EVAL external-DVDD routing and a separately
-measured 0.9 V source. The same two firmware commands are used in both cases.
+The internal-DVDD experiment uses `J12` open and `J24` ON. For the
+external-DVDD experiment, power the EVAL off, move `J24` to OFF, close `J12`,
+select EXT on `JP1`, and connect a current-limited 0.9 V source to `J3`. Verify
+that the unpowered EVAL has no continuity between that source and an on-board
+DVDD regulator before energizing it. The same two firmware commands are used
+in both cases.
 
 ## Build
 
