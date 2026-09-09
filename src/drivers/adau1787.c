@@ -42,6 +42,20 @@ static const struct gpio_dt_spec codec_mp6 = GPIO_DT_SPEC_GET(ADAU1787_NODE, mp6
 
 static int adau_init_error = 0;
 
+/* ADAU1787 control registers used by the explicit HA soak-test power policy. */
+#define ADAU1787_REG_ADC_MUTES 0xC01CU
+#define ADAU1787_REG_DAC_CTRL2 0xC03BU
+#define ADAU1787_REG_DAC_VOL0 0xC03CU
+#define ADAU1787_REG_DAC_VOL1 0xC03DU
+#define ADAU1787_REG_HP_CTRL 0xC040U
+#define ADAU1787_REG_FDSP_RUN 0xC061U
+#define ADAU1787_REG_SDSP_CTRL1 0xC080U
+#define ADAU1787_REG_SDSP_RUN 0xC081U
+#define ADAU1787_REG_ASRC_PWR 0xC009U
+
+#define ADAU1787_DSP_PWR_SDSP_ONLY 0x10U
+#define ADAU1787_SDSP_HIGH_SPEED_ADC01_RATE 0x10U
+
 #define ADAU1787_FIELD_GET(value, mask, shift) (((value) & (mask)) >> (shift))
 
 static int disconnect_serial_gpio(const struct gpio_dt_spec* gpio, const char* name)
@@ -206,6 +220,81 @@ int adau1787_init(void)
   ERR_CHK_MSG(adau_init_error, "Failed to program ADAU1787 codec");
 
   LOG_INF("Audio codec initialization done.");
+  return 0;
+}
+
+static int write_and_verify_register(sub_addr_t address, reg_word_t value, const char* name)
+{
+  int ret = adau1787_write_register(address, &value);
+  if (ret != 0) {
+    LOG_ERR("Failed to write ADAU1787 %s (0x%04x): %d", name, address, ret);
+    return ret;
+  }
+
+  reg_word_t readback = 0;
+  ret = adau1787_read_register(address, &readback);
+  if (ret != 0) {
+    LOG_ERR("Failed to read back ADAU1787 %s (0x%04x): %d", name, address, ret);
+    return ret;
+  }
+
+  if (readback != value) {
+    LOG_ERR("ADAU1787 %s readback mismatch: wrote 0x%02x, read 0x%02x", name, value, readback);
+    return -EIO;
+  }
+
+  LOG_INF("ADAU1787 %-17s = 0x%02x", name, readback);
+  return 0;
+}
+
+int adau1787_apply_ha_power_trim(uint8_t input_adc, uint8_t output_dac)
+{
+  if (input_adc > 1U || output_dac > 1U) {
+    LOG_ERR("HA power trim supports only Tiresias ADC0/1 and DAC0/1");
+    return -EINVAL;
+  }
+
+  /*
+   * Keep the selected AIN/PGA/microphone-bias channel and one playback path.
+   * The PLL remains enabled because the 24.576 MHz external MCLK is used to
+   * derive the high-speed 49.152 MHz SigmaDSP clock required by this graph.
+   */
+  const reg_word_t analog_power = (reg_word_t)(BIT(0) | BIT(2U + input_adc) | BIT(4U + input_adc));
+  const reg_word_t converter_power = (reg_word_t)(BIT(input_adc) | BIT(4U + output_dac));
+  const reg_word_t adc_mutes = (reg_word_t)(0x0FU & ~BIT(input_adc));
+  const reg_word_t final_dac_mutes = output_dac == 0U ? BIT(7) : BIT(6);
+  const reg_word_t hp_mode = output_dac == 0U ? BIT(0) : BIT(4);
+
+  struct {
+    sub_addr_t address;
+    reg_word_t value;
+    const char* name;
+  } writes[] = {
+    { ADAU1787_REG_SDSP_RUN, 0x00U, "SDSP_RUN" },
+    { ADAU1787_REG_DAC_CTRL2, 0xC0U, "DAC_CTRL2" },
+    { SAI_CLK_PWR, 0x00U, "SAI_CLK_PWR" },
+    { ADAU1787_REG_ASRC_PWR, 0x00U, "ASRC_PWR" },
+    { DMIC_PWR, 0x00U, "DMIC_PWR" },
+    { ADAU1787_REG_FDSP_RUN, 0x00U, "FDSP_RUN" },
+    { DSP_PWR, ADAU1787_DSP_PWR_SDSP_ONLY, "DSP_PWR" },
+    { ADAU1787_REG_SDSP_CTRL1, ADAU1787_SDSP_HIGH_SPEED_ADC01_RATE, "SDSP_CTRL1" },
+    { PLL_MB_PGA_PWR, analog_power, "PLL_MB_PGA_PWR" },
+    { ADAU1787_REG_ADC_MUTES, adc_mutes, "ADC_MUTES" },
+    { ADC_DAC_HP_PWR, converter_power, "ADC_DAC_HP_PWR" },
+    { ADAU1787_REG_HP_CTRL, hp_mode, "HP_CTRL" },
+    { output_dac == 0U ? ADAU1787_REG_DAC_VOL1 : ADAU1787_REG_DAC_VOL0, 0xFFU, "UNUSED_DAC_VOL" },
+    { ADAU1787_REG_SDSP_RUN, 0x01U, "SDSP_RUN" },
+    { ADAU1787_REG_DAC_CTRL2, final_dac_mutes, "DAC_CTRL2" },
+  };
+
+  LOG_INF("Applying mono HA power trim: ADC%u -> DAC%u", input_adc, output_dac);
+  for (size_t i = 0; i < ARRAY_SIZE(writes); i++) {
+    int ret = write_and_verify_register(writes[i].address, writes[i].value, writes[i].name);
+    if (ret != 0) {
+      return ret;
+    }
+  }
+
   return 0;
 }
 

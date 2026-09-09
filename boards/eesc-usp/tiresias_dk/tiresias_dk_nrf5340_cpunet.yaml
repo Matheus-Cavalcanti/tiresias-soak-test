@@ -1,0 +1,13 @@
+identifier: tiresias_dk/nrf5340/cpunet
+name: TIRESIAS-DK-NRF5340-network-MCU
+type: mcu
+arch: arm
+toolchain:
+  - gnuarmemb
+  - xtools
+  - zephyr
+ram: 64
+flash: 256
+supported:
+  - watchdog
+vendor: eesc-usp

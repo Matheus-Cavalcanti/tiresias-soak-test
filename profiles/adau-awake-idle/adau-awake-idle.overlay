@@ -1,0 +1,4 @@
+/* Keep HFCLKAUDIO and the nRF I2S peripheral off during the awake-idle test. */
+&i2s0 {
+	status = "disabled";
+};

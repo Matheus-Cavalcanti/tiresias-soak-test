@@ -76,6 +76,19 @@ typedef uint16_t sub_addr_t;
 int adau1787_init(void);
 
 /**
+ * @brief Reduce the ADAU1787 to the local mono hearing-aid signal path.
+ *
+ * Apply this only after the SigmaStudio default download. Generated files are
+ * left untouched so that a new export can be dropped in without losing the
+ * explicit soak-test power policy.
+ *
+ * @param input_adc Analog input channel, 0 (MIC0_OUT) or 1 (MIC1_OUT).
+ * @param output_dac Playback/headphone channel, 0 or 1.
+ * @return 0 if every write and readback succeeds, negative error otherwise.
+ */
+int adau1787_apply_ha_power_trim(uint8_t input_adc, uint8_t output_dac);
+
+/**
  * @brief Read and log the ADAU1787 STATUS2 register.
  */
 void adau1787_log_status_2(void);
