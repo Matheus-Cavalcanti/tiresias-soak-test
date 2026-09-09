@@ -22,7 +22,9 @@
 LOG_MODULE_REGISTER(main_eval_i2c, LOG_LEVEL_INF);
 
 #define EVAL_I2C_NODE DT_NODELABEL(i2c2)
-#define ADAU1787_I2C_ADDRESS 0x2BU
+#define ADAU1787_I2C_ADDRESS_FIRST 0x28U
+#define ADAU1787_I2C_ADDRESS_LAST 0x2BU
+#define ADAU1787_I2C_ADDRESS_DEFAULT 0x2BU
 
 #define ADAU1787_REG_VENDOR_ID 0xC000U
 #define ADAU1787_REG_POWER_BASE 0xC004U
@@ -40,6 +42,7 @@ LOG_MODULE_REGISTER(main_eval_i2c, LOG_LEVEL_INF);
 static const struct device* const eval_i2c = DEVICE_DT_GET(EVAL_I2C_NODE);
 static const struct gpio_dt_spec button_software_pd = GPIO_DT_SPEC_GET(DT_ALIAS(sw0), gpios);
 static const struct gpio_dt_spec button_digital_on = GPIO_DT_SPEC_GET(DT_ALIAS(sw1), gpios);
+static uint8_t adau1787_i2c_address = ADAU1787_I2C_ADDRESS_DEFAULT;
 
 static const uint8_t software_power_down[ADAU1787_POWER_REGISTER_COUNT] = {
   0x00, /* C004 ADC_DAC_HP_PWR */
@@ -62,37 +65,55 @@ static int adau1787_write(uint16_t reg, uint8_t value)
     value,
   };
 
-  return i2c_write(eval_i2c, tx, sizeof(tx), ADAU1787_I2C_ADDRESS);
+  return i2c_write(eval_i2c, tx, sizeof(tx), adau1787_i2c_address);
 }
 
-static int adau1787_read(uint16_t reg, uint8_t* data, size_t length)
+static int adau1787_read_at(uint8_t device_address, uint16_t reg, uint8_t* data, size_t length)
 {
   const uint8_t address[] = {
     (uint8_t)(reg >> 8),
     (uint8_t)(reg & 0xFFU),
   };
 
-  return i2c_write_read(eval_i2c, ADAU1787_I2C_ADDRESS, address, sizeof(address), data, length);
+  return i2c_write_read(eval_i2c, device_address, address, sizeof(address), data, length);
+}
+
+static int adau1787_read(uint16_t reg, uint8_t* data, size_t length)
+{
+  return adau1787_read_at(adau1787_i2c_address, reg, data, length);
 }
 
 static int verify_identity(void)
 {
-  uint8_t identity[4];
-  int ret = adau1787_read(ADAU1787_REG_VENDOR_ID, identity, sizeof(identity));
+  int last_error = -ENODEV;
 
-  if (ret != 0) {
-    LOG_ERR(
-        "ADAU1787 did not acknowledge at 0x%02x: %d; open EVAL J15 and check ADDR1/ADDR0", ADAU1787_I2C_ADDRESS, ret);
-    return ret;
+  LOG_INF(
+      "Scanning ADAU1787 I2C addresses 0x%02x through 0x%02x", ADAU1787_I2C_ADDRESS_FIRST, ADAU1787_I2C_ADDRESS_LAST);
+
+  for (uint8_t candidate = ADAU1787_I2C_ADDRESS_FIRST; candidate <= ADAU1787_I2C_ADDRESS_LAST; ++candidate) {
+    uint8_t identity[4];
+    int ret = adau1787_read_at(candidate, ADAU1787_REG_VENDOR_ID, identity, sizeof(identity));
+
+    if (ret != 0) {
+      LOG_INF("No ACK at 0x%02x (%d)", candidate, ret);
+      last_error = ret;
+      continue;
+    }
+
+    if (identity[0] == 0x41U && identity[1] == 0x17U && identity[2] == 0x87U) {
+      adau1787_i2c_address = candidate;
+      LOG_INF("ADAU1787 detected at 0x%02x; revision 0x%02x", adau1787_i2c_address, identity[3]);
+      return 0;
+    }
+
+    LOG_WRN("Device at 0x%02x has unexpected identity %02x %02x %02x rev %02x", candidate, identity[0], identity[1],
+        identity[2], identity[3]);
+    last_error = -ENODEV;
   }
 
-  if (identity[0] != 0x41U || identity[1] != 0x17U || identity[2] != 0x87U) {
-    LOG_ERR("Unexpected identity: %02x %02x %02x rev %02x", identity[0], identity[1], identity[2], identity[3]);
-    return -ENODEV;
-  }
-
-  LOG_INF("ADAU1787 detected at 0x%02x; revision 0x%02x", ADAU1787_I2C_ADDRESS, identity[3]);
-  return 0;
+  LOG_ERR("No ADAU1787 found at 0x%02x through 0x%02x; check SDA/SCL continuity and EVAL J15",
+      ADAU1787_I2C_ADDRESS_FIRST, ADAU1787_I2C_ADDRESS_LAST);
+  return last_error;
 }
 
 static int write_power_registers(const uint8_t values[ADAU1787_POWER_REGISTER_COUNT])
