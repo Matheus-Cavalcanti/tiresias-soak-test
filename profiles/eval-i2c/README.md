@@ -20,8 +20,10 @@ Do not connect either board's 1.8 V output to the other board. The EVAL must
 provide the only SDA and SCL pull-ups, referenced to its IOVDD. The selected
 Audio DK pins avoid the DK's on-board I2C bus and its INA231 pull-ups.
 
-Before the measurement, set the EVAL to I2C address `0x2B` (`ADDR1=1`,
-`ADDR0=1`), disable self-boot and select I2C control mode.
+Before the measurement, move both I2C address switches, `S4` and `S1`, to
+HIGH. This sets `ADDR1=1` and `ADDR0=1`, selecting the 7-bit address `0x2B`.
+Disable self-boot with `S2=OFF` and select I2C control mode with `J25` in the
+I2C position.
 
 ## Safe power order
 
