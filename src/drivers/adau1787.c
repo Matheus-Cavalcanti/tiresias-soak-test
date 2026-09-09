@@ -1,12 +1,21 @@
 #include "adau1787.h"
 #include "SigmaStudioFW.h"
 #include "macros_common.h"
+#if defined(CONFIG_TIRESIAS_SOAK_PROFILE_EVAL_I2C)
+#include "tiresias-tir39-empty_IC_1_FAST.h"
+#include "tiresias-tir39-empty_IC_1_FAST_PARAM.h"
+#include "tiresias-tir39-empty_IC_1_FAST_REG.h"
+#include "tiresias-tir39-empty_IC_1_SIGMA.h"
+#include "tiresias-tir39-empty_IC_1_SIGMA_PARAM.h"
+#include "tiresias-tir39-empty_IC_1_SIGMA_REG.h"
+#else
 #include "tiresias-soak-ha_IC_1_FAST.h"
 #include "tiresias-soak-ha_IC_1_FAST_PARAM.h"
 #include "tiresias-soak-ha_IC_1_FAST_REG.h"
 #include "tiresias-soak-ha_IC_1_SIGMA.h"
 #include "tiresias-soak-ha_IC_1_SIGMA_PARAM.h"
 #include "tiresias-soak-ha_IC_1_SIGMA_REG.h"
+#endif
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -24,7 +33,9 @@ LOG_MODULE_REGISTER(adau1787_driver, LOG_LEVEL_INF);
 #define ADAU1787_CONTROL_PORT_SETTLE_MS 100U
 /* The exported safeload module contains data slots plus target and trigger parameters. */
 #define ADAU1787_SAFELOAD_MAX_WORDS (MOD_SAFELOADMODULE_COUNT - 2U)
+#if !defined(CONFIG_TIRESIAS_SOAK_PROFILE_EVAL_I2C)
 BUILD_ASSERT(PARAM_ADDR_IC_1_Sigma == 0x2000, "Param Memory Address must be 0x2000.");
+#endif
 
 /** @brief Device Tree Specification for ADAU1787 */
 #define ADAU1787_NODE DT_NODELABEL(adau_1787)
@@ -214,13 +225,28 @@ int adau1787_init(void)
   ret = adau1787_release_control_port();
   ERR_CHK_MSG(ret, "Failed to release ADAU1787 control port");
 
-  adau_init_error = 0;
-  default_download_IC_1_Sigma();
-  default_download_IC_1_Fast();
-  ERR_CHK_MSG(adau_init_error, "Failed to program ADAU1787 codec");
+  ret = adau1787_download();
+  ERR_CHK_MSG(ret, "Failed to program ADAU1787 codec");
 
   LOG_INF("Audio codec initialization done.");
   return 0;
+}
+
+int adau1787_download(void)
+{
+  adau_init_error = 0;
+  default_download_IC_1_Sigma();
+
+  /* The TIR-39 export has no FastDSP program or parameter payload. */
+#if !defined(CONFIG_TIRESIAS_SOAK_PROFILE_EVAL_I2C)
+  default_download_IC_1_Fast();
+#endif
+
+  if (adau_init_error != 0) {
+    LOG_ERR("SigmaStudio download failed: %d", adau_init_error);
+  }
+
+  return adau_init_error;
 }
 
 // Write operations

@@ -37,10 +37,10 @@ elseif(CONFIG_TIRESIAS_SOAK_PROFILE_EVAL_I2C)
       src/drivers
       src/utils/macros
       src/SigmaStudioFiles
+      src/SigmaStudioFiles/tir39-empty
   )
 
   add_subdirectory(src/drivers)
-  add_subdirectory(src/SigmaStudioFiles)
 else()
   string(TIMESTAMP NRF5340_AUDIO_CORE_APP_COMP_DATE "%a %b %d %H:%M:%S %Y")
 

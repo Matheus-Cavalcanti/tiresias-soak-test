@@ -51,17 +51,21 @@ extern const struct i2c_dt_spec dev_i2c;
  * Write to a single Device register
  */
 #define SIGMA_WRITE_REGISTER(devAddress, address, dataLength, data)                                                    \
-  {                                                                                                                    \
-    adau1787_write(address, data, dataLength);                                                                         \
-  }
+  do {                                                                                                                 \
+    if ((dataLength) > 0U) {                                                                                           \
+      adau1787_write(address, data, dataLength);                                                                       \
+    }                                                                                                                  \
+  } while (0)
 
 /*
  * Write to multiple Device registers
  */
 #define SIGMA_WRITE_REGISTER_BLOCK(devAddress, address, length, pData)                                                 \
-  {                                                                                                                    \
-    adau1787_write(address, pData, length);                                                                            \
-  }
+  do {                                                                                                                 \
+    if ((length) > 0U) {                                                                                               \
+      adau1787_write(address, pData, length);                                                                          \
+    }                                                                                                                  \
+  } while (0)
 
 /*
  * Writes delay (in ms)

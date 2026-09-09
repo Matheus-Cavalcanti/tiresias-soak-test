@@ -23,9 +23,10 @@ config TIRESIAS_SOAK_PROFILE_EVAL_I2C
 	bool "Control an EVAL-ADAU1787Z over external I2C"
 	help
 	  Use an nRF5340 Audio DK as an independently powered 1.8 V I2C
-	  controller for TIR-39. No DSP program, Bluetooth stream, audio clock or
-	  on-board codec is used. The EVAL board remains powered exclusively by
-	  the measurement supply.
+	  controller for TIR-39. A DSP-empty SigmaStudio export initializes the
+	  ADAU1787 control registers; no Bluetooth stream, audio clock or on-board
+	  codec is used. The EVAL board remains powered exclusively by the
+	  measurement supply.
 
 menuconfig NRF5340_AUDIO
 	 bool "nRF5340 Audio [EXPERIMENTAL]"

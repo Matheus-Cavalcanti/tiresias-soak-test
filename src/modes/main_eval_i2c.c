@@ -3,8 +3,9 @@
  *
  * The independently powered nRF5340 Audio DK controls the EVAL through GND,
  * SDA, SCL and !PD only. The production ADAU1787 driver owns the control port
- * and performs a deterministic hardware reset before register access. No
- * SigmaStudio program is downloaded by this diagnostic profile.
+ * and performs a deterministic hardware reset before register access. A
+ * dedicated DSP-empty SigmaStudio export initializes the hardware registers
+ * before the requested measurement state is applied and read back.
  */
 
 #include "adau1787.h"
@@ -181,6 +182,19 @@ static int reset_and_start_control_port(void)
   ret = wait_for_power_up_complete();
   if (ret != 0) {
     LOG_ERR("POWER_UP_COMPLETE timeout: %d", ret);
+    return ret;
+  }
+
+  ret = adau1787_download();
+  if (ret != 0) {
+    LOG_ERR("Empty SigmaStudio export download failed: %d", ret);
+    return ret;
+  }
+  LOG_INF("DSP-empty SigmaStudio export downloaded successfully");
+
+  ret = wait_for_power_up_complete();
+  if (ret != 0) {
+    LOG_ERR("POWER_UP_COMPLETE timeout after SigmaStudio download: %d", ret);
   }
 
   return ret;
@@ -216,6 +230,11 @@ static int apply_minimal_digital_on(void)
   uint8_t expected[ADAU1787_POWER_REGISTER_COUNT];
   memcpy(expected, software_power_down, sizeof(expected));
   expected[ADAU1787_POWER_REGISTER_COUNT - 1U] = 0x15U;
+
+  ret = write_power_registers(expected);
+  if (ret != 0) {
+    return ret;
+  }
 
   ret = verify_power_registers(expected);
   if (ret == 0) {

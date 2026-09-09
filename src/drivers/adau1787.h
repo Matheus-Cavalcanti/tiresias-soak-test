@@ -18,7 +18,11 @@
 #ifndef ADAU1787_H
 #define ADAU1787_H
 
+#if defined(CONFIG_TIRESIAS_SOAK_PROFILE_EVAL_I2C)
+#include "tiresias-tir39-empty_IC_1_SIGMA_REG.h"
+#else
 #include "tiresias-soak-ha_IC_1_SIGMA_REG.h"
+#endif
 #include <stddef.h>
 #include <stdint.h>
 #include <zephyr/drivers/i2c.h>
@@ -74,6 +78,16 @@ typedef uint16_t sub_addr_t;
  * @return 0 if successful, negative error code otherwise.
  */
 int adau1787_init(void);
+
+/**
+ * @brief Download the selected SigmaStudio export to an initialized ADAU1787.
+ *
+ * The caller must prepare and release the control port first. The export is
+ * selected at build time by the active application profile.
+ *
+ * @return 0 if successful, negative error code otherwise.
+ */
+int adau1787_download(void);
 
 /**
  * @brief Configure the control bus and hold the ADAU1787 in hardware power-down.
