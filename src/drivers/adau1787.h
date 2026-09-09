@@ -76,6 +76,28 @@ typedef uint16_t sub_addr_t;
 int adau1787_init(void);
 
 /**
+ * @brief Configure the control bus and hold the ADAU1787 in hardware power-down.
+ *
+ * The active-low !PD output is asserted before this function returns. The DSP
+ * program is not downloaded.
+ *
+ * @return 0 if successful, negative error code otherwise.
+ */
+int adau1787_prepare_control_port(void);
+
+/**
+ * @brief Release hardware power-down and wait for the control port to settle.
+ *
+ * This does not download a SigmaStudio program.
+ *
+ * @return 0 if successful, negative error code otherwise.
+ */
+int adau1787_release_control_port(void);
+
+/** @brief Assert the active-low ADAU1787 !PD input. */
+int adau1787_power_down(void);
+
+/**
  * @brief Read and log the ADAU1787 STATUS2 register.
  */
 void adau1787_log_status_2(void);

@@ -3,42 +3,47 @@
 This profile turns an independently powered nRF5340 Audio DK into a minimal
 ADAU1787 power-state controller. It replaces the USBi during current
 measurements, so the EVAL remains powered exclusively by the Power Profiler.
-It never downloads a SigmaStudio program.
+It uses the production Tiresias ADAU1787 driver and a devicetree device node,
+but does not download a SigmaStudio program.
 
 ## Electrical setup
 
 Power the Audio DK from its own USB connector and power the EVAL only from the
-Power Profiler at 4.2 V. Connect three signals only:
+Power Profiler at 4.2 V. Connect four signals only:
 
 | Audio DK Arduino header | nRF5340 pin | EVAL | Recommended series resistor |
 |---|---|---|---|
 | `D9` | `P1.13` | `SDA` | 330 ohm to 470 ohm |
 | `D10` | `P1.12` | `SCL` | 330 ohm to 470 ohm |
+| `D5` | `P1.14` | ADAU1787 `!PD` net | 330 ohm to 470 ohm |
 | `GND` | - | `GND` | Direct |
 
 Do not connect either board's 1.8 V output to the other board. The EVAL must
 provide the only SDA and SCL pull-ups, referenced to its IOVDD. The selected
-Audio DK pins avoid the DK's on-board I2C bus and its INA231 pull-ups.
+Audio DK pins avoid the DK's on-board I2C bus and its INA231 pull-ups. Open
+EVAL `J15` and connect `D5` to the J15 terminal that has continuity to the
+ADAU1787 `!PD` pin. Determine this terminal by continuity; do not infer it from
+the board orientation.
 
 Before the measurement, move both I2C address switches, `S4` and `S1`, to
 HIGH. This sets `ADDR1=1` and `ADDR0=1`, selecting the 7-bit address `0x2B`.
 Disable self-boot with `S2=OFF` and select I2C control mode with `J25` in the
-I2C position. As a diagnostic safeguard, the firmware scans all four valid
-ADAU1787 addresses (`0x28` through `0x2B`), validates the device identity and
-uses the address it finds for the subsequent register writes.
+I2C position. The devicetree node fixes the address at `0x2B`; this deliberately
+matches the production-driver path instead of using the earlier runtime scan.
 
 ## Safe power order
 
-1. Connect GND, SDA and SCL with both boards off.
-2. Power the Audio DK. Do not press either control button.
+1. With both boards off, open EVAL `J15` and connect GND, SDA, SCL and `!PD`.
+2. Power the Audio DK. It asserts `!PD` low and does not access I2C.
 3. Power the EVAL from the Power Profiler.
-4. Perform the hardware-PD baseline with EVAL `J15` closed.
-5. Open `J15`, then use the Audio DK buttons described below.
+4. Perform the hardware-PD baseline with `!PD` controlled low by Audio DK D5.
+5. Use the Audio DK buttons described below. Keep `J15` open throughout.
 6. After the last measurement, leave both buttons released and power the EVAL
    off first. Power the Audio DK off last.
 
 The TWIM pins are open-drain and have no nRF pull-up. No I2C transaction occurs
-until a control button is pressed.
+until a control button is pressed. The D5 `!PD` output is push-pull, which is
+why `J15` must not short it to ground.
 
 ## Controls
 
@@ -47,10 +52,18 @@ until a control button is pressed.
 | `VOL-` / Button 1 | Software full-chip power-down; no keep-alives | `0x14` |
 | `VOL+` / Button 2 | Minimal digital-on; no PLL, DSP, ADC, DAC or SAI | `0x15` |
 
-Each action waits 20 ms for the internal regulator after the manual release of
-`!PD`, verifies the ADAU1787 identity, writes the power registers and reads them
-back. The digital-on action follows the staged `0x11`, 35 ms, `0x15` sequence
-and requires `POWER_UP_COMPLETE=1` before reporting success.
+Each action asserts `!PD` for 10 ms, releases it, waits 100 ms and deliberately
+makes its first I2C transaction a simple `CHIP_PWR=0x11` write. After the write
+ACK it waits 35 ms, writes `0x15`, reads the `41 17 87 xx` identity and requires
+`POWER_UP_COMPLETE=1`. The selected final power state is then written and read
+back. This distinguishes a failure of the first write from a failure of the
+following repeated-start reads.
+
+There is no genuinely empty SigmaStudio export in this repository yet. The
+profile therefore stops at the driver-backed reset, write, identity and status
+sequence. Do not substitute the hearing-aid export for current measurements;
+when an empty export is generated, add it only after the write-first ACK and
+identity checks pass.
 
 The internal-DVDD experiment uses `J12` open and `J24` ON. For the
 external-DVDD experiment, power the EVAL off, move `J24` to OFF, close `J12`,

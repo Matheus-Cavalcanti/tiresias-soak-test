@@ -20,6 +20,8 @@ LOG_MODULE_REGISTER(adau1787_driver, LOG_LEVEL_INF);
 
 /* Two complete audio frames at 16 kHz. */
 #define ADAU1787_SAFELOAD_DELAY_US 125U
+#define ADAU1787_HARDWARE_PD_MIN_MS 10U
+#define ADAU1787_CONTROL_PORT_SETTLE_MS 100U
 /* The exported safeload module contains data slots plus target and trigger parameters. */
 #define ADAU1787_SAFELOAD_MAX_WORDS (MOD_SAFELOADMODULE_COUNT - 2U)
 BUILD_ASSERT(PARAM_ADDR_IC_1_Sigma == 0x2000, "Param Memory Address must be 0x2000.");
@@ -32,13 +34,13 @@ const struct i2c_dt_spec adau1787_i2c = I2C_DT_SPEC_GET(ADAU1787_NODE);
 /** @brief Codec !PD pin (Power Down - active low) */
 static const struct gpio_dt_spec codec_powerdown = GPIO_DT_SPEC_GET(ADAU1787_NODE, powerdown_gpios);
 /** @brief Codec MP3 pin (Multi Purpose pin 3) */
-static const struct gpio_dt_spec codec_mp3 = GPIO_DT_SPEC_GET(ADAU1787_NODE, mp3_gpios);
+static const struct gpio_dt_spec codec_mp3 = GPIO_DT_SPEC_GET_OR(ADAU1787_NODE, mp3_gpios, { 0 });
 /** @brief Codec MP4 pin (Multi Purpose pin 4) */
-static const struct gpio_dt_spec codec_mp4 = GPIO_DT_SPEC_GET(ADAU1787_NODE, mp4_gpios);
+static const struct gpio_dt_spec codec_mp4 = GPIO_DT_SPEC_GET_OR(ADAU1787_NODE, mp4_gpios, { 0 });
 /** @brief Codec MP5 pin (Multi Purpose pin 5) */
-static const struct gpio_dt_spec codec_mp5 = GPIO_DT_SPEC_GET(ADAU1787_NODE, mp5_gpios);
+static const struct gpio_dt_spec codec_mp5 = GPIO_DT_SPEC_GET_OR(ADAU1787_NODE, mp5_gpios, { 0 });
 /** @brief Codec MP6 pin (Multi Purpose pin 6) */
-static const struct gpio_dt_spec codec_mp6 = GPIO_DT_SPEC_GET(ADAU1787_NODE, mp6_gpios);
+static const struct gpio_dt_spec codec_mp6 = GPIO_DT_SPEC_GET_OR(ADAU1787_NODE, mp6_gpios, { 0 });
 
 static int adau_init_error = 0;
 
@@ -46,6 +48,10 @@ static int adau_init_error = 0;
 
 static int disconnect_serial_gpio(const struct gpio_dt_spec* gpio, const char* name)
 {
+  if (gpio->port == NULL) {
+    return 0;
+  }
+
   if (!gpio_is_ready_dt(gpio)) {
     LOG_ERR("ADAU1787 %s GPIO controller is not ready", name);
     return -ENODEV;
@@ -162,30 +168,40 @@ int adau1787_power_down(void)
  */
 int adau1787_config_i2c(void)
 {
-  int ret = 0;
-
-  const struct device* i2c_dev = device_get_binding("I2C_1");
-  if (!i2c_dev) {
-    LOG_ERR("I2C binding failed.");
-    return -1;
+  if (!device_is_ready(adau1787_i2c.bus)) {
+    LOG_ERR("I2C bus %s is not ready!", adau1787_i2c.bus->name);
+    return -ENODEV;
   }
 
-  ret = i2c_configure(i2c_dev, I2C_SPEED_SET(I2C_SPEED_FAST_PLUS));
+  LOG_INF("ADAU1787 control bus %s ready at address 0x%02x", adau1787_i2c.bus->name, adau1787_i2c.addr);
+  return 0;
+}
+
+int adau1787_prepare_control_port(void)
+{
+  int ret = adau1787_config_gpios();
   if (ret != 0) {
-    LOG_ERR("Failed to configure I2C_1: %d", ret);
     return ret;
   }
 
-  LOG_DBG("SCL pin: %d", NRF_TWIM1->PSEL.SCL);
-  LOG_DBG("SDA pin: %d", NRF_TWIM1->PSEL.SDA);
-  LOG_DBG("I2C frequency: %d", NRF_TWIM1->FREQUENCY);
-
-  if (!device_is_ready(adau1787_i2c.bus)) {
-    LOG_ERR("I2C bus %s is not ready!", adau1787_i2c.bus->name);
-    return -1;
+  ret = adau1787_config_i2c();
+  if (ret != 0) {
+    return ret;
   }
 
-  return ret;
+  k_msleep(ADAU1787_HARDWARE_PD_MIN_MS);
+  return 0;
+}
+
+int adau1787_release_control_port(void)
+{
+  int ret = adau1787_power_up();
+  if (ret != 0) {
+    return ret;
+  }
+
+  k_msleep(ADAU1787_CONTROL_PORT_SETTLE_MS);
+  return 0;
 }
 
 int adau1787_init(void)
@@ -193,14 +209,12 @@ int adau1787_init(void)
   LOG_INF("Initializing audio codec...");
   int ret = 0;
 
-  ret = adau1787_config_gpios();
-  ERR_CHK_MSG(ret, "Failed to config ADAU1787 GPIOs");
-  ret = adau1787_config_i2c();
-  ERR_CHK_MSG(ret, "Failed to config ADAU1787 I2C");
-  ret = adau1787_power_up();
-  ERR_CHK_MSG(ret, "Failed to power up ADAU1787");
-  k_msleep(100);
+  ret = adau1787_prepare_control_port();
+  ERR_CHK_MSG(ret, "Failed to prepare ADAU1787 control port");
+  ret = adau1787_release_control_port();
+  ERR_CHK_MSG(ret, "Failed to release ADAU1787 control port");
 
+  adau_init_error = 0;
   default_download_IC_1_Sigma();
   default_download_IC_1_Fast();
   ERR_CHK_MSG(adau_init_error, "Failed to program ADAU1787 codec");

@@ -12,20 +12,16 @@ properties:
 
   mp3-gpios:
     type: phandle-array
-    required: true
     description: ADAU1787 multipurpose pin 3 connection
 
   mp4-gpios:
     type: phandle-array
-    required: true
     description: ADAU1787 multipurpose pin 4 connection
 
   mp5-gpios:
     type: phandle-array
-    required: true
     description: ADAU1787 multipurpose pin 5 connection
 
   mp6-gpios:
     type: phandle-array
-    required: true
     description: ADAU1787 multipurpose pin 6 connection

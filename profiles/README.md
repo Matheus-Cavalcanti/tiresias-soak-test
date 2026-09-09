@@ -69,8 +69,8 @@ ADAU1787 !PD asserted; no I2C/SigmaStudio download; entering idle
 For TIR-39 measurements on the EVAL-ADAU1787Z, use the independently powered
 nRF5340 Audio DK controller described in
 [`profiles/eval-i2c/README.md`](eval-i2c/README.md). It uses Audio DK `D9` and
-`D10` for a dedicated external I2C bus and keeps the EVAL out of the USBi power
-domain.
+`D10` for a dedicated external I2C bus, plus `D5` for a deterministic `!PD`
+cycle, and keeps the EVAL out of the USBi power domain.
 
 In the nRF Connect for VS Code build configuration, select
 `tiresias_dk/nrf5340/cpuapp`, enable sysbuild and use the same four CMake

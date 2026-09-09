@@ -32,6 +32,15 @@ elseif(CONFIG_TIRESIAS_SOAK_PROFILE_ADAU_PD)
   target_sources(app PRIVATE src/modes/main_adau_pd.c)
 elseif(CONFIG_TIRESIAS_SOAK_PROFILE_EVAL_I2C)
   target_sources(app PRIVATE src/modes/main_eval_i2c.c)
+
+  zephyr_library_include_directories(
+      src/drivers
+      src/utils/macros
+      src/SigmaStudioFiles
+  )
+
+  add_subdirectory(src/drivers)
+  add_subdirectory(src/SigmaStudioFiles)
 else()
   string(TIMESTAMP NRF5340_AUDIO_CORE_APP_COMP_DATE "%a %b %d %H:%M:%S %Y")
 

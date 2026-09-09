@@ -1,30 +1,26 @@
 /*
  * TIR-39 EVAL-ADAU1787Z power-state controller.
  *
- * The nRF5340 Audio DK is powered independently and connects to the EVAL
- * through GND, SDA and SCL only. J15 remains the manual hardware !PD control.
- * No SigmaStudio program is downloaded.
+ * The independently powered nRF5340 Audio DK controls the EVAL through GND,
+ * SDA, SCL and !PD only. The production ADAU1787 driver owns the control port
+ * and performs a deterministic hardware reset before register access. No
+ * SigmaStudio program is downloaded by this diagnostic profile.
  */
+
+#include "adau1787.h"
 
 #include <errno.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
 
-#include <zephyr/device.h>
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/gpio.h>
-#include <zephyr/drivers/i2c.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/util.h>
 
 LOG_MODULE_REGISTER(main_eval_i2c, LOG_LEVEL_INF);
-
-#define EVAL_I2C_NODE DT_NODELABEL(i2c2)
-#define ADAU1787_I2C_ADDRESS_FIRST 0x28U
-#define ADAU1787_I2C_ADDRESS_LAST 0x2BU
-#define ADAU1787_I2C_ADDRESS_DEFAULT 0x2BU
 
 #define ADAU1787_REG_VENDOR_ID 0xC000U
 #define ADAU1787_REG_POWER_BASE 0xC004U
@@ -34,15 +30,13 @@ LOG_MODULE_REGISTER(main_eval_i2c, LOG_LEVEL_INF);
 #define ADAU1787_POWER_REGISTER_COUNT 10U
 #define ADAU1787_POWER_UP_COMPLETE BIT(7)
 
-#define REG_EN_SETTLE_MS 20
-#define CM_SETTLE_MS 35
-#define POWER_UP_TIMEOUT_MS 100
-#define BUTTON_POLL_MS 20
+#define HARDWARE_PD_MS 10U
+#define CM_SETTLE_MS 35U
+#define POWER_UP_TIMEOUT_MS 100U
+#define BUTTON_POLL_MS 20U
 
-static const struct device* const eval_i2c = DEVICE_DT_GET(EVAL_I2C_NODE);
 static const struct gpio_dt_spec button_software_pd = GPIO_DT_SPEC_GET(DT_ALIAS(sw0), gpios);
 static const struct gpio_dt_spec button_digital_on = GPIO_DT_SPEC_GET(DT_ALIAS(sw1), gpios);
-static uint8_t adau1787_i2c_address = ADAU1787_I2C_ADDRESS_DEFAULT;
 
 static const uint8_t software_power_down[ADAU1787_POWER_REGISTER_COUNT] = {
   0x00, /* C004 ADC_DAC_HP_PWR */
@@ -57,71 +51,38 @@ static const uint8_t software_power_down[ADAU1787_POWER_REGISTER_COUNT] = {
   0x14, /* C00D: DLDO=0.9 V, CM boost off, blocks off, POWER_EN=0 */
 };
 
-static int adau1787_write(uint16_t reg, uint8_t value)
-{
-  const uint8_t tx[] = {
-    (uint8_t)(reg >> 8),
-    (uint8_t)(reg & 0xFFU),
-    value,
-  };
-
-  return i2c_write(eval_i2c, tx, sizeof(tx), adau1787_i2c_address);
-}
-
-static int adau1787_read_at(uint8_t device_address, uint16_t reg, uint8_t* data, size_t length)
-{
-  const uint8_t address[] = {
-    (uint8_t)(reg >> 8),
-    (uint8_t)(reg & 0xFFU),
-  };
-
-  return i2c_write_read(eval_i2c, device_address, address, sizeof(address), data, length);
-}
-
-static int adau1787_read(uint16_t reg, uint8_t* data, size_t length)
-{
-  return adau1787_read_at(adau1787_i2c_address, reg, data, length);
-}
-
 static int verify_identity(void)
 {
-  int last_error = -ENODEV;
+  uint8_t identity[4];
+  int ret = adau1787_read(ADAU1787_REG_VENDOR_ID, identity, sizeof(identity));
 
-  LOG_INF(
-      "Scanning ADAU1787 I2C addresses 0x%02x through 0x%02x", ADAU1787_I2C_ADDRESS_FIRST, ADAU1787_I2C_ADDRESS_LAST);
-
-  for (uint8_t candidate = ADAU1787_I2C_ADDRESS_FIRST; candidate <= ADAU1787_I2C_ADDRESS_LAST; ++candidate) {
-    uint8_t identity[4];
-    int ret = adau1787_read_at(candidate, ADAU1787_REG_VENDOR_ID, identity, sizeof(identity));
-
-    if (ret != 0) {
-      LOG_INF("No ACK at 0x%02x (%d)", candidate, ret);
-      last_error = ret;
-      continue;
-    }
-
-    if (identity[0] == 0x41U && identity[1] == 0x17U && identity[2] == 0x87U) {
-      adau1787_i2c_address = candidate;
-      LOG_INF("ADAU1787 detected at 0x%02x; revision 0x%02x", adau1787_i2c_address, identity[3]);
-      return 0;
-    }
-
-    LOG_WRN("Device at 0x%02x has unexpected identity %02x %02x %02x rev %02x", candidate, identity[0], identity[1],
-        identity[2], identity[3]);
-    last_error = -ENODEV;
+  if (ret != 0) {
+    LOG_ERR("ADAU1787 identity read failed at 0x2b: %d", ret);
+    return ret;
   }
 
-  LOG_ERR("No ADAU1787 found at 0x%02x through 0x%02x; check SDA/SCL continuity and EVAL J15",
-      ADAU1787_I2C_ADDRESS_FIRST, ADAU1787_I2C_ADDRESS_LAST);
-  return last_error;
+  if (identity[0] != 0x41U || identity[1] != 0x17U || identity[2] != 0x87U) {
+    LOG_ERR("Unexpected identity %02x %02x %02x rev %02x", identity[0], identity[1], identity[2], identity[3]);
+    return -ENODEV;
+  }
+
+  LOG_INF("ADAU1787 detected at 0x2b; identity 41 17 87, revision 0x%02x", identity[3]);
+  return 0;
+}
+
+static int write_register(uint16_t address, uint8_t value)
+{
+  return adau1787_write_register(address, &value);
 }
 
 static int write_power_registers(const uint8_t values[ADAU1787_POWER_REGISTER_COUNT])
 {
   for (uint16_t index = 0U; index < ADAU1787_POWER_REGISTER_COUNT; ++index) {
-    int ret = adau1787_write(ADAU1787_REG_POWER_BASE + index, values[index]);
+    const uint16_t address = ADAU1787_REG_POWER_BASE + index;
+    int ret = write_register(address, values[index]);
+
     if (ret != 0) {
-      LOG_ERR("Write failed at 0x%04x: %d", ADAU1787_REG_POWER_BASE + index, ret);
+      LOG_ERR("Write failed at 0x%04x: %d", address, ret);
       return ret;
     }
   }
@@ -140,11 +101,11 @@ static int verify_power_registers(const uint8_t expected[ADAU1787_POWER_REGISTER
   }
 
   for (uint16_t index = 0U; index < ADAU1787_POWER_REGISTER_COUNT; ++index) {
-    const uint16_t reg = ADAU1787_REG_POWER_BASE + index;
+    const uint16_t address = ADAU1787_REG_POWER_BASE + index;
 
-    LOG_INF("ADAU1787 0x%04x = 0x%02x", reg, actual[index]);
+    LOG_INF("ADAU1787 0x%04x = 0x%02x", address, actual[index]);
     if (actual[index] != expected[index]) {
-      LOG_ERR("Readback mismatch at 0x%04x: expected 0x%02x", reg, expected[index]);
+      LOG_ERR("Readback mismatch at 0x%04x: expected 0x%02x", address, expected[index]);
       return -EIO;
     }
   }
@@ -152,11 +113,82 @@ static int verify_power_registers(const uint8_t expected[ADAU1787_POWER_REGISTER
   return 0;
 }
 
+static int wait_for_power_up_complete(void)
+{
+  for (uint32_t elapsed = 0U; elapsed <= POWER_UP_TIMEOUT_MS; ++elapsed) {
+    uint8_t status;
+    int ret = adau1787_read(ADAU1787_REG_STATUS2, &status, sizeof(status));
+
+    if (ret != 0) {
+      return ret;
+    }
+    if ((status & ADAU1787_POWER_UP_COMPLETE) != 0U) {
+      LOG_INF("POWER_UP_COMPLETE=1 after %u ms", elapsed);
+      return 0;
+    }
+    k_msleep(1);
+  }
+
+  return -ETIMEDOUT;
+}
+
+static int reset_and_start_control_port(void)
+{
+  int ret = adau1787_power_down();
+  if (ret != 0) {
+    return ret;
+  }
+
+  k_msleep(HARDWARE_PD_MS);
+
+  ret = adau1787_release_control_port();
+  if (ret != 0) {
+    return ret;
+  }
+
+  /*
+   * Deliberately make the first bus transaction a simple write. This mirrors
+   * the SigmaStudio/Tiresias path and separates write ACK from the following
+   * repeated-start register read.
+   */
+  ret = write_register(ADAU1787_REG_CHIP_PWR, 0x11U);
+  if (ret != 0) {
+    LOG_ERR("Write-first CHIP_PWR probe failed at 0x2b: %d", ret);
+    return ret;
+  }
+  LOG_INF("Write-first CHIP_PWR=0x11 acknowledged at 0x2b");
+
+  for (uint16_t index = 0U; index < ADAU1787_POWER_REGISTER_COUNT - 1U; ++index) {
+    ret = write_register(ADAU1787_REG_POWER_BASE + index, 0x00U);
+    if (ret != 0) {
+      LOG_ERR("Failed to disable block at 0x%04x: %d", ADAU1787_REG_POWER_BASE + index, ret);
+      return ret;
+    }
+  }
+
+  k_msleep(CM_SETTLE_MS);
+
+  ret = write_register(ADAU1787_REG_CHIP_PWR, 0x15U);
+  if (ret != 0) {
+    return ret;
+  }
+
+  ret = verify_identity();
+  if (ret != 0) {
+    return ret;
+  }
+
+  ret = wait_for_power_up_complete();
+  if (ret != 0) {
+    LOG_ERR("POWER_UP_COMPLETE timeout: %d", ret);
+  }
+
+  return ret;
+}
+
 static int apply_software_power_down(void)
 {
-  k_msleep(REG_EN_SETTLE_MS);
-
-  int ret = verify_identity();
+  int ret = reset_and_start_control_port();
   if (ret != 0) {
     return ret;
   }
@@ -168,62 +200,16 @@ static int apply_software_power_down(void)
 
   ret = verify_power_registers(software_power_down);
   if (ret == 0) {
-    LOG_INF("STATE=SOFTWARE_PD: POWER_EN=0, internal DLDO selected; measure EVAL current and DVDD");
+    LOG_INF("STATE=SOFTWARE_PD: !PD=1, POWER_EN=0; measure EVAL current and DVDD");
   }
 
   return ret;
 }
 
-static int wait_for_power_up_complete(void)
-{
-  for (int elapsed = 0; elapsed <= POWER_UP_TIMEOUT_MS; ++elapsed) {
-    uint8_t status;
-    int ret = adau1787_read(ADAU1787_REG_STATUS2, &status, sizeof(status));
-
-    if (ret != 0) {
-      return ret;
-    }
-    if ((status & ADAU1787_POWER_UP_COMPLETE) != 0U) {
-      LOG_INF("POWER_UP_COMPLETE=1 after %d ms", elapsed);
-      return 0;
-    }
-    k_msleep(1);
-  }
-
-  return -ETIMEDOUT;
-}
-
 static int apply_minimal_digital_on(void)
 {
-  k_msleep(REG_EN_SETTLE_MS);
-
-  int ret = verify_identity();
+  int ret = reset_and_start_control_port();
   if (ret != 0) {
-    return ret;
-  }
-
-  ret = write_power_registers(software_power_down);
-  if (ret != 0) {
-    return ret;
-  }
-
-  /* POWER_EN=1, DLDO=0.9 V, CM fast-charge active, all blocks still off. */
-  ret = adau1787_write(ADAU1787_REG_CHIP_PWR, 0x11U);
-  if (ret != 0) {
-    return ret;
-  }
-
-  k_msleep(CM_SETTLE_MS);
-
-  /* End CM fast charge; keep MASTER_BLOCK_EN=0 and every block disabled. */
-  ret = adau1787_write(ADAU1787_REG_CHIP_PWR, 0x15U);
-  if (ret != 0) {
-    return ret;
-  }
-
-  ret = wait_for_power_up_complete();
-  if (ret != 0) {
-    LOG_ERR("POWER_UP_COMPLETE timeout: %d", ret);
     return ret;
   }
 
@@ -233,7 +219,7 @@ static int apply_minimal_digital_on(void)
 
   ret = verify_power_registers(expected);
   if (ret == 0) {
-    LOG_INF("STATE=DIGITAL_ON_MINIMAL: POWER_EN=1, no PLL/DSP/ADC/DAC; measure EVAL current and DVDD");
+    LOG_INF("STATE=DIGITAL_ON_MINIMAL: !PD=1, POWER_EN=1, no PLL/DSP/ADC/DAC; measure EVAL current and DVDD");
   }
 
   return ret;
@@ -250,12 +236,13 @@ static int configure_button(const struct gpio_dt_spec* button)
 
 int main(void)
 {
-  if (!device_is_ready(eval_i2c)) {
-    LOG_ERR("External EVAL I2C controller is not ready");
-    return -ENODEV;
+  int ret = adau1787_prepare_control_port();
+  if (ret != 0) {
+    LOG_ERR("Failed to prepare ADAU1787 control port: %d", ret);
+    return ret;
   }
 
-  int ret = configure_button(&button_software_pd);
+  ret = configure_button(&button_software_pd);
   if (ret != 0) {
     LOG_ERR("Software-PD button configuration failed: %d", ret);
     return ret;
@@ -267,9 +254,10 @@ int main(void)
     return ret;
   }
 
-  LOG_INF("TIR-39 controller ready; Audio DK D9=SDA, D10=SCL, common GND only");
-  LOG_INF("Measure HARDWARE_PD with EVAL J15 closed and no button pressed");
-  LOG_INF("Open J15; press VOL- for SOFTWARE_PD or VOL+ for DIGITAL_ON_MINIMAL");
+  LOG_INF("TIR-39 driver-backed controller ready at 0x2b");
+  LOG_INF("Audio DK D9=SDA, D10=SCL, D5=!PD; common GND; EVAL J15 must remain open");
+  LOG_INF("STATE=HARDWARE_PD: !PD=0; measure EVAL current and DVDD now");
+  LOG_INF("Press VOL- for SOFTWARE_PD or VOL+ for DIGITAL_ON_MINIMAL");
 
   bool previous_software_pd = false;
   bool previous_digital_on = false;

@@ -1,4 +1,5 @@
 #include <zephyr/dt-bindings/pinctrl/nrf-pinctrl.h>
+#include <zephyr/dt-bindings/gpio/gpio.h>
 
 /*
  * Use two otherwise unused Arduino-header pins instead of the Audio DK's
@@ -6,6 +7,7 @@
  *
  *   D9  / P1.13 -> EVAL SDA
  *   D10 / P1.12 -> EVAL SCL
+ *   D5  / P1.14 -> EVAL ADAU1787 !PD (J15 open)
  *
  * The ADAU1787 EVAL supplies the only bus pull-ups, referenced to its IOVDD.
  */
@@ -33,6 +35,13 @@
 	pinctrl-0 = <&eval_i2c_default>;
 	pinctrl-1 = <&eval_i2c_sleep>;
 	pinctrl-names = "default", "sleep";
+
+	adau_1787: adau1787@2b {
+		compatible = "adi,adau1787";
+		status = "okay";
+		reg = <0x2b>;
+		powerdown-gpios = <&gpio1 14 GPIO_ACTIVE_LOW>;
+	};
 };
 
 /* Keep the Audio DK's local peripherals out of this diagnostic image. */
