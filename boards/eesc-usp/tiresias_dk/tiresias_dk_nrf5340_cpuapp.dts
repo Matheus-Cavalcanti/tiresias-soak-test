@@ -1,0 +1,39 @@
+/*
+ * Copyright (c) 2020 Nordic Semiconductor ASA
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/dts-v1/;
+#include <nordic/nrf5340_cpuapp_qkaa.dtsi>
+#include "tiresias_dk_nrf5340_cpuapp_common.dtsi"
+
+/ {
+  model = "Nordic Tiresias DK NRF5340 Application";
+  compatible = "nordic,tiresias-dk-nrf5340-cpuapp";
+
+  chosen {
+    zephyr,sram = &sram0_image;
+    zephyr,flash = &flash0;
+    zephyr,code-partition = &slot0_partition;
+    zephyr,sram-secure-partition = &sram0_s;
+    zephyr,sram-non-secure-partition = &sram0_ns;
+  };
+};
+
+&uicr {
+  nfct-pins-as-gpios;
+};
+
+&mx25r16 {
+  partitions {
+    compatible = "fixed-partitions";
+    #address-cells = <1>;
+    #size-cells = <1>;
+  };
+
+  sck-frequency = <16000000>;
+};
+
+/* Include default memory partition configuration file */
+#include <nordic/nrf5340_cpuapp_partition.dtsi>

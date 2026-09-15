@@ -1,0 +1,18 @@
+identifier: tiresias_dk/nrf5340/cpuapp/ns
+name: TIRESIAS-DK-NRF5340-application-MCU-Non-Secure
+type: mcu
+arch: arm
+toolchain:
+  - gnuarmemb
+  - xtools
+  - zephyr
+ram: 192
+flash: 192
+supported:
+  - i2c
+  - i2s
+  - pwm
+  - watchdog
+  - usb_device
+vendor: eesc-usp
+sysbuild: true

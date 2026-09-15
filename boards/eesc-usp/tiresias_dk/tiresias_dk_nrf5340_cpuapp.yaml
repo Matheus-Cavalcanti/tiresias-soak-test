@@ -1,0 +1,18 @@
+identifier: tiresias_dk/nrf5340/cpuapp
+name: TIRESIAS-DK-NRF5340-application-MCU
+type: mcu
+arch: arm
+toolchain:
+  - gnuarmemb
+  - xtools
+  - zephyr
+ram: 448
+flash: 1024
+supported:
+  - gpio
+  - i2s
+  - i2c
+  - pwm
+  - watchdog
+  - usb_device
+vendor: eesc-usp

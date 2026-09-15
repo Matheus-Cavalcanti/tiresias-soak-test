@@ -12,9 +12,48 @@ config TIRESIAS_SOAK_PROFILE_HA
 	  intentionally not part of this profile; the ADAU1787 receives MCLK from
 	  the board's external oscillator.
 
+config TIRESIAS_SOAK_PROFILE_BASELINE
+	bool "VDD-domain baseline soak-test image"
+	help
+	  Leave the ADAU1787 untouched and return immediately to the Zephyr idle
+	  thread. This profile is intended for direct-VDD measurements on the board
+	  without the PMIC, before enabling VSYS/AVDD-dependent circuitry.
+
+config TIRESIAS_SOAK_PROFILE_ADAU_PD
+	bool "ADAU1787 power-down soak-test image"
+	help
+	  Keep all board supply rails present, explicitly assert the active-low
+	  ADAU1787 !PD input and then leave the nRF5340 application core idle.
+	  This profile does not initialize I2C or download a SigmaStudio program.
+
+config TIRESIAS_SOAK_PROFILE_ADAU_AWAKE_IDLE
+	bool "ADAU1787 awake-idle soak-test image"
+	help
+	  Release the active-low ADAU1787 !PD input, retain control-port access,
+	  explicitly disable every block-level power control and then leave the
+	  nRF5340 application core idle. No SigmaStudio program is downloaded.
+
+config TIRESIAS_HA_INPUT_ADC
+	int "ADAU1787 analog input used by the HA soak profile"
+	depends on TIRESIAS_SOAK_PROFILE_HA
+	range 0 1
+	default 0
+	help
+	  Select ADC0/MICBIAS0 for the MIC0_OUT microphone or ADC1/MICBIAS1 for
+	  MIC1_OUT. The Tiresias microphones are wired to AIN0 and AIN1.
+
+config TIRESIAS_HA_OUTPUT_DAC
+	int "ADAU1787 mono playback channel used by the HA soak profile"
+	depends on TIRESIAS_SOAK_PROFILE_HA
+	range 0 1
+	default 0
+	help
+	  Select playback/headphone channel 0 or 1. The other channel is muted and
+	  powered down after the SigmaStudio download.
+
 menuconfig NRF5340_AUDIO
 	 bool "nRF5340 Audio [EXPERIMENTAL]"
-	 depends on !TIRESIAS_SOAK_PROFILE_HA
+	 depends on !TIRESIAS_SOAK_PROFILE_HA && !TIRESIAS_SOAK_PROFILE_BASELINE && !TIRESIAS_SOAK_PROFILE_ADAU_PD && !TIRESIAS_SOAK_PROFILE_ADAU_AWAKE_IDLE
 	 select EXPERIMENTAL
 
 if NRF5340_AUDIO

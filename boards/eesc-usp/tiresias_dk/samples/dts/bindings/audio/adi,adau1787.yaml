@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: Apache-2.0
+
+description: Analog Devices ADAU1787 audio codec
+
+compatible: "adi,adau1787"
+
+include: i2c-device.yaml
+
+properties:
+  powerdown-gpios:
+    type: phandle-array
+    required: true
+    description: |
+      GPIO connected to the codec power-down pin. The ADAU1787 pin is active
+      low, so boards should normally define this as GPIO_ACTIVE_LOW.
+
+  mp3-gpios:
+    type: phandle-array
+    description: GPIO connected to the codec MP3 multipurpose pin.
+
+  mp4-gpios:
+    type: phandle-array
+    description: GPIO connected to the codec MP4 multipurpose pin.
+
+  mp5-gpios:
+    type: phandle-array
+    description: GPIO connected to the codec MP5 multipurpose pin.
+
+  mp6-gpios:
+    type: phandle-array
+    description: GPIO connected to the codec MP6 multipurpose pin.

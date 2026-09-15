@@ -1,0 +1,9 @@
+board:
+  name: tiresias_dk
+  full_name: Tiresias DK
+  vendor: eesc-usp
+  socs:
+  - name: 'nrf5340'
+    variants:
+    - name: 'ns'
+      cpucluster: 'cpuapp'
