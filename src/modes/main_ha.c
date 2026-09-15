@@ -6,6 +6,7 @@
  */
 
 #include "adau1787.h"
+#include "soak_i2c_sleep.h"
 
 #include <zephyr/autoconf.h>
 #include <zephyr/logging/log.h>
@@ -27,7 +28,13 @@ int main(void)
     return ret;
   }
 
-  LOG_INF("HA soak profile ready (ADC%d -> DAC%d); entering idle with external ADAU1787 MCLK",
+  ret = soak_suspend_adau1787_i2c();
+  if (ret != 0) {
+    LOG_ERR("Failed to suspend ADAU1787 I2C: %d", ret);
+    return ret;
+  }
+
+  LOG_INF("HA soak profile ready (ADC%d -> DAC%d); I2C suspended; entering idle with external ADAU1787 MCLK",
       CONFIG_TIRESIAS_HA_INPUT_ADC, CONFIG_TIRESIAS_HA_OUTPUT_DAC);
 
   /* Returning terminates the main thread; Zephyr's idle thread takes over. */

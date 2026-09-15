@@ -7,9 +7,9 @@ unused radio, I2S, logging, or indicator activity.
 | Profile | ADAU1787 signal path | nRF5340 workload | Status |
 |---|---|---|---|
 | `baseline` | ADAU1787 untouched | Log once, then idle; intended for direct-VDD measurements | Implemented |
-| `adau-pd` | Supply rails present; `!PD` explicitly held low; no control-port download | Assert one GPIO, log once, then idle | Implemented |
-| `adau-awake-idle` | `!PD` high; software full-chip power-down; no SigmaStudio download | Configure minimum power state over I2C, then idle | Implemented |
-| `ha` | Local microphones through the hearing-aid filter/compressor design | Program ADAU1787 over I2C, then idle | Implemented |
+| `adau-pd` | Supply rails present; `!PD` explicitly held low; no control-port transfer or download | Initialize and suspend I2C, log once, then idle | Implemented |
+| `adau-awake-idle` | `!PD` high; software full-chip power-down; no SigmaStudio download | Configure minimum power state, suspend I2C, then idle | Implemented |
+| `ha` | Local microphones through the hearing-aid filter/compressor design | Program ADAU1787, suspend I2C, then idle | Implemented |
 | `ble-dac` | Transparent I2S-to-DAC design | Receive/decode BIS audio and drive I2S | Planned; awaiting SigmaStudio export |
 | `ble-ha` | I2S through the hearing-aid filter/compressor design | Receive/decode BIS audio and drive I2S | Planned; awaiting SigmaStudio export |
 
@@ -17,6 +17,11 @@ The current transport implementation is LE Audio broadcast (BIS), so the two
 radio profiles use `ble-*` instead of `tws-*` in filenames and reports.
 
 ## Measured board current and open anomaly
+
+The measurements below predate the explicit I2C suspend now shared by the
+three ADAU profiles. They are retained as the historical baseline and must be
+repeated with the current profile implementations before drawing a new
+comparison.
 
 The values below are steady-state current measured at the complete Tiresias
 board input, with the debugger disconnected. They include the nRF5340, PMIC,
@@ -107,12 +112,15 @@ west build -p always -b tiresias_dk/nrf5340/cpuapp --sysbuild . \
 ```
 
 This image keeps the existing AVDD, IOVDD and DVDD supply arrangement intact,
-configures only the ADAU1787 `!PD` GPIO as an asserted active-low output, emits
-one RTT identification message and enters idle. It does not enable I2C and does
-not execute a SigmaStudio download. The expected final message is:
+configures the ADAU1787 `!PD` GPIO as an asserted active-low output, initializes
+the same I2C controller used by the other profiles, explicitly suspends it,
+emits one RTT identification message and enters idle. It performs no I2C
+transfer and does not execute a SigmaStudio download. Suspending the nRF TWIM
+peripheral also applies the `i2c1_sleep` pinctrl state. The expected final
+message is:
 
 ```text
-ADAU1787 !PD asserted; no I2C/SigmaStudio download; entering idle
+ADAU1787 !PD asserted; I2C suspended; no control-port transfer or SigmaStudio download; entering idle
 ```
 
 For the intermediate state with the ADAU1787 released from hardware power-down
@@ -123,8 +131,13 @@ enables off. It also clears the reset-default `XTAL_EN=1`; the physical external
 MCLK oscillator remains powered on the Tiresias board. The expected final log is:
 
 ```text
-ADAU1787 awake-idle ready; POWER_EN=0; no SigmaStudio download; entering idle
+ADAU1787 awake-idle ready; POWER_EN=0; I2C suspended; no SigmaStudio download; entering idle
 ```
+
+The HA profile likewise suspends the controller only after the SigmaStudio
+download, power trim and register readback have completed. All three ADAU
+measurement profiles therefore enter their steady-state measurement period
+with the same I2C device-power state.
 
 In the nRF Connect for VS Code build configuration, select
 `tiresias_dk/nrf5340/cpuapp`, enable sysbuild and use the same four CMake
@@ -172,18 +185,21 @@ For `baseline`, replace the first expression with
 `build_soak_baseline` directory. `TIRESIAS_SOAK_PROFILE_BASELINE=y` and
 `NETCORE_NONE=y` must be present; the listed peripherals must be `n` or absent.
 For `adau-pd`, check
-`CONFIG_(TIRESIAS_SOAK_PROFILE_ADAU_PD|BT|GPIO|I2C|I2S|NRFX_I2S0)` in
+`CONFIG_(TIRESIAS_SOAK_PROFILE_ADAU_PD|BT|GPIO|I2C|PINCTRL|PM_DEVICE|I2S|NRFX_I2S0)` in
 `build_soak_adau_pd/tiresias-firmware/zephyr/.config` and verify
-`SB_CONFIG_NETCORE_NONE=y` in `build_soak_adau_pd/zephyr/.config`. GPIO must be
-enabled; Bluetooth, I2C and I2S must be disabled or absent.
+`SB_CONFIG_NETCORE_NONE=y` in `build_soak_adau_pd/zephyr/.config`. GPIO, I2C,
+PINCTRL and device power management must be enabled; Bluetooth and I2S must be
+disabled or absent.
 For `adau-awake-idle`, use the corresponding profile symbol and build directory;
-GPIO and I2C must be enabled, while Bluetooth and I2S must be disabled or absent.
-Expected values are `TIRESIAS_SOAK_PROFILE_HA=y`, `BT=n`/absent,
-`I2S=n`/absent, `NRFX_I2S0=n`/absent, `NETCORE_NONE=y`, and no IPC-radio child
-image. NCS v3.0.1 can still display `SB_CONFIG_NRF_DEFAULT_IPC_RADIO=y`; this is
-only a default selector and does not create CPUNET when `NETCORE_NONE=y` is the
-selected `NETCORE` choice. Record the firmware commit, SigmaStudio export name,
-board ID, supply mode and steady-state current with every result.
+GPIO, I2C, PINCTRL and device power management must be enabled, while Bluetooth
+and I2S must be disabled or absent.
+For `ha`, I2C, PINCTRL and device power management must also be enabled.
+Expected shared values are `BT=n`/absent, `I2S=n`/absent,
+`NRFX_I2S0=n`/absent, `NETCORE_NONE=y`, and no IPC-radio child image. NCS v3.0.1
+can still display `SB_CONFIG_NRF_DEFAULT_IPC_RADIO=y`; this is only a default
+selector and does not create CPUNET when `NETCORE_NONE=y` is the selected
+`NETCORE` choice. Record the firmware commit, SigmaStudio export name, board ID,
+supply mode and steady-state current with every result.
 
 ## SigmaStudio exports
 
