@@ -8,9 +8,9 @@ config TIRESIAS_SOAK_PROFILE_HA
 	bool "Minimal hearing-aid soak-test image"
 	help
 	  Program the ADAU1787 over I2C and then leave the nRF5340 application
-	  core idle. Bluetooth, the network core and the nRF I2S peripheral are
-	  intentionally not part of this profile; the ADAU1787 receives MCLK from
-	  the board's external oscillator.
+	  core idle with the I2C controller suspended. Bluetooth, the network core
+	  and the nRF I2S peripheral are intentionally not part of this profile;
+	  the ADAU1787 receives MCLK from the board's external oscillator.
 
 config TIRESIAS_SOAK_PROFILE_BASELINE
 	bool "VDD-domain baseline soak-test image"
@@ -23,15 +23,17 @@ config TIRESIAS_SOAK_PROFILE_ADAU_PD
 	bool "ADAU1787 power-down soak-test image"
 	help
 	  Keep all board supply rails present, explicitly assert the active-low
-	  ADAU1787 !PD input and then leave the nRF5340 application core idle.
-	  This profile does not initialize I2C or download a SigmaStudio program.
+	  ADAU1787 !PD input, initialize and suspend the control I2C bus, and then
+	  leave the nRF5340 application core idle. This profile performs no I2C
+	  transfer and does not download a SigmaStudio program.
 
 config TIRESIAS_SOAK_PROFILE_ADAU_AWAKE_IDLE
 	bool "ADAU1787 awake-idle soak-test image"
 	help
 	  Release the active-low ADAU1787 !PD input, retain control-port access,
-	  explicitly disable every block-level power control and then leave the
-	  nRF5340 application core idle. No SigmaStudio program is downloaded.
+	  explicitly disable every block-level power control, suspend the I2C bus,
+	  and then leave the nRF5340 application core idle. No SigmaStudio program
+	  is downloaded.
 
 config TIRESIAS_HA_INPUT_ADC
 	int "ADAU1787 analog input used by the HA soak profile"
