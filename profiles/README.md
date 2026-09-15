@@ -16,6 +16,38 @@ unused radio, I2S, logging, or indicator activity.
 The current transport implementation is LE Audio broadcast (BIS), so the two
 radio profiles use `ble-*` instead of `tws-*` in filenames and reports.
 
+## Measured board current and open anomaly
+
+The values below are steady-state current measured at the complete Tiresias
+board input, with the debugger disconnected. They include the nRF5340, PMIC,
+regulator losses and the ADAU1787; they are not direct measurements of an
+individual ADAU1787 supply rail.
+
+| ADAU1787 state | VBUS: approximately 4.99 V | VBAT: approximately 3.70 V |
+|---|---:|---:|
+| Hardware power-down (`adau-pd`, `!PD=0`) | 9–10 mA | 11–12 mA |
+| Software power-down (`adau-awake-idle`, `!PD=1`, `POWER_EN=0`) | 33 mA | 38 mA |
+| Active mono HA processing | 33 mA | 41 mA |
+
+Releasing `!PD` while retaining `POWER_EN=0` therefore increased the measured
+VBAT input current by approximately 26 mA, or 96 mW at 3.70 V. Enabling the
+mono audio path added only approximately 3 mA relative to `adau-awake-idle`.
+
+Analog Devices reported that this increase is not expected. According to the
+EngineerZone response, keeping the control port operational should add a
+negligible current, and leaving the internal DVDD LDO enabled should bring the
+ADAU1787 power-down consumption to approximately 1 mW rather than introduce an
+increase approaching 100 mW. The corresponding discussion is recorded at:
+
+<https://ez.analog.com/dsp/sigmadsp/f/q-a/605977/adau1787-current-consumption-in-software-power-down-when-using-the-internal-dvdd-ldo/604991>
+
+The experimental states were verified at the ADAU1787: `!PD` measured 0 V with
+`adau-pd` and 1.8 V with `adau-awake-idle`. This remains an open system-level
+anomaly. Before assigning the 96 mW increase to the ADAU1787 itself, measure
+AVDD and IOVDD current separately, together with the input and output currents
+of the regulators supplying those rails. Record supply voltage, board ID,
+firmware commit and three stabilized readings for every new result.
+
 ## Build the HA image
 
 The custom-board repository must be placed below a directory literally named
